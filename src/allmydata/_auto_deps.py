@@ -28,7 +28,7 @@ install_requires = [
     # * The SFTP frontend depends on Twisted 11.0.0 to fix the SSH server
     #   rekeying bug http://twistedmatrix.com/trac/ticket/4395
     #
-    "Twisted >= 11.0.0",
+    "Twisted >= 11.0.0, <= 12.2.0",
 
     # * foolscap < 0.5.1 had a performance bug which spent O(N**2) CPU for
     #   transferring large mutable files of size N.
