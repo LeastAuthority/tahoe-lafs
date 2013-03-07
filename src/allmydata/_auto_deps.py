@@ -65,7 +65,6 @@ install_requires = [
 
     # needed for cloud backend
     "txAWS == 0.2.1.post5",
-    "oauth2client >= 1.0",
 
     # Will be needed to test web apps, but not yet. See #1001.
     #"windmill >= 1.3",
