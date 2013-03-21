@@ -236,8 +236,6 @@ def configure_googlestorage_container(storedir, config):
     account_email = config.get_config("storage", "googlestorage.account_email")
     private_key = config.get_private_config("googlestorage_private_key")
     bucket_name = config.get_config("storage", "googlestorage.bucket_name")
-    # Only necessary if we do bucket creation/deletion, otherwise can be
-    # removed:
     project_id = config.get_config("storage", "googlestorage.project_id")
 
     authclient = AuthenticationClient(account_email, private_key)
