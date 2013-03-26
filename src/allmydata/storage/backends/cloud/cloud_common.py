@@ -14,6 +14,7 @@ except ImportError:
     HTTPConnectionPool = None
 from twisted.web.http_headers import Headers
 from twisted.internet.protocol import Protocol
+from twisted.internet.error import TimeoutError
 
 from zope.interface import Interface, implements
 from allmydata.interfaces import IShareBase
@@ -360,8 +361,8 @@ class ContainerRetryMixin:
         def _retry(f):
             d2 = self._handle_error(f, 1, None, description, operation, *args, **kwargs)
             def _trigger_incident(res):
-                log.msg(format="error(s) on cloud container operation: %(description)s %(arguments)s %(kwargs)s",
-                        arguments=args[:2], kwargs=kwargs, description=description,
+                log.msg(format="error(s) on cloud container operation: %(description)s %(arguments)s %(kwargs)s %(res)s",
+                        arguments=args[:2], kwargs=kwargs, description=description, res=res,
                         level=log.WEIRD)
                 return res
             d2.addBoth(_trigger_incident)
@@ -370,7 +371,7 @@ class ContainerRetryMixin:
         return d
 
     def _handle_error(self, f, trynum, first_err_and_tb, description, operation, *args, **kwargs):
-        f.trap(self.ServiceError)
+        f.trap(self.ServiceError, TimeoutError)
 
         # Don't use f.getTracebackObject() since a fake traceback will not do for the 3-arg form of 'raise'.
         # tb can be None (which is acceptable for 3-arg raise) if we don't have a traceback.
@@ -384,8 +385,8 @@ class ContainerRetryMixin:
         err = CloudError(msg, *fargs)
 
         # This should not trigger an incident; we want to do that at the end.
-        log.msg(format="try %(trynum)d failed: %(description)s %(arguments)s %(kwargs)s %(fargs)s",
-                trynum=trynum, arguments=args_without_data, kwargs=kwargs, description=description, fargs=repr(fargs),
+        log.msg(format="try %(trynum)d failed: %(description)s %(arguments)s %(kwargs)s %(ftype)s %(fargs)s",
+                trynum=trynum, arguments=args_without_data, kwargs=kwargs, description=description, ftype=str(f.value.__class__), fargs=repr(fargs),
                 level=log.INFREQUENT)
 
         if first_err_and_tb is None:
@@ -397,13 +398,18 @@ class ContainerRetryMixin:
             (first_err, first_tb) = first_err_and_tb
             raise first_err.__class__, first_err, first_tb
 
-        fargs = f.value.args
-        if len(fargs) > 0:
-            retry = self._react_to_error(int(fargs[0]))
-            if retry:
-                d = task.deferLater(self._reactor, BACKOFF_SECONDS_BEFORE_RETRY[trynum-1], operation, *args, **kwargs)
-                d.addErrback(self._handle_error, trynum+1, first_err_and_tb, description, operation, *args, **kwargs)
-                return d
+        retry = True
+        if f.check(self.ServiceError):
+            fargs = f.value.args
+            if len(fargs) > 0:
+                retry = self._react_to_error(int(fargs[0]))
+            else:
+                retry = False
+
+        if retry:
+            d = task.deferLater(self._reactor, BACKOFF_SECONDS_BEFORE_RETRY[trynum-1], operation, *args, **kwargs)
+            d.addErrback(self._handle_error, trynum+1, first_err_and_tb, description, operation, *args, **kwargs)
+            return d
 
         # If we get an error response for which _react_to_error says we should not retry,
         # raise that error even if the request was itself a retry.
@@ -709,9 +715,11 @@ class CommonContainerMixin(HTTPClientMixin, ContainerRetryMixin):
         self._container_name = container_name
         self._reactor = override_reactor or reactor
         if HTTPConnectionPool:
-            self._agent = Agent(self._reactor, pool=HTTPConnectionPool(self._reactor))
+            pool = HTTPConnectionPool(self._reactor)
+            pool.maxPersistentPerHost = 20
+            self._agent = Agent(self._reactor, connectTimeout=10, pool=pool)
         else:
-            self._agent = Agent(self._reactor)
+            self._agent = Agent(self._reactor, connectTimeout=10)
         self.ServiceError = CloudServiceError
 
     def __repr__(self):
