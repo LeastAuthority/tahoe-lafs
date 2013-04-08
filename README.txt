@@ -14,17 +14,6 @@ LICENCE
 
 Copyright 2006-2013 The Tahoe-LAFS Software Foundation
 
-You may use this package under the GNU General Public License, version 2 or, at
-your option, any later version.  You may use this package under the Transitive
-Grace Period Public Licence, version 1.0, or at your option, any later
-version. (You may choose to use this package under the terms of either licence,
-at your option.)  See the file `COPYING.GPL`_ for the terms of the GNU General
-Public License, version 2.  See the file `COPYING.TGPPL.rst`_ for the terms of
-the Transitive Grace Period Public Licence, version 1.0.
-
-See `TGPPL.PDF`_ for why the TGPPL exists, graphically illustrated on three slides.
-
-.. _quickstart.rst: https://github.com/tahoe-lafs/tahoe-lafs/blob/master/docs/quickstart.rst
-.. _COPYING.GPL: https://github.com/tahoe-lafs/tahoe-lafs/blob/master/COPYING.GPL
-.. _COPYING.TGPPL.rst: https://github.com/tahoe-lafs/tahoe-lafs/blob/master/COPYING.TGPPL.rst
-.. _TGPPL.PDF: https://tahoe-lafs.org/~zooko/tgppl.pdf
+While official releases of Tahoe-LAFS are open-source, to the extent allowed
+by law, this distribution is intended only for evaluation by BIT Systems under
+the terms of its contract with Least Authority Enterprises.
