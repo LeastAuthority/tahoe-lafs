@@ -67,9 +67,11 @@ install_requires = [
 
     # needed for cloud backend
     "txAWS == 0.2.1.post5",
+    "oauth2client == 1.1.0",
 
     # Will be needed to test web apps, but not yet. See #1001.
     #"windmill >= 1.3",
+
 ]
 
 # Includes some indirect dependencies, but does not include allmydata.
@@ -90,6 +92,7 @@ package_imports = [
     ('pyasn1',          'pyasn1'),
     ('mock',            'mock'),
     ('txAWS',           'txaws'),
+    ('oauth2client',    'oauth2client'),
     ('python-dateutil', 'dateutil'),
 ]
 
