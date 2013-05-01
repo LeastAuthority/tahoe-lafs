@@ -157,7 +157,7 @@ class ImmutableCloudShareForReading(CloudShareBase, ImmutableCloudShareMixin, Cl
         chunksize = len(first_chunkdata)
         if chunksize < self.HEADER_SIZE:
             msg = "%r had incomplete header (%d bytes)" % (self, chunksize)
-            raise UnknownImmutableContainerVersionError(msg)
+            raise UnknownImmutableContainerVersionError(shnum, msg)
 
         self._total_size = total_size
         self._chunksize = chunksize
@@ -167,11 +167,14 @@ class ImmutableCloudShareForReading(CloudShareBase, ImmutableCloudShareMixin, Cl
         #print "ImmutableCloudShareForReading", total_size, chunksize, self._key
 
         header = first_chunkdata[:self.HEADER_SIZE]
-        (version, unused, num_leases) = struct.unpack(self.HEADER, header)
+        try:
+            (version, unused, num_leases) = struct.unpack(self.HEADER, header)
+        except struct.error, e:
+            raise CorruptShareError(shnum, "invalid immutable share header for shnum %d: %s" % (shnum, e))
 
         if version != 1:
             msg = "%r had version %d but we wanted 1" % (self, version)
-            raise UnknownImmutableContainerVersionError(msg)
+            raise UnknownImmutableContainerVersionError(shnum, msg)
 
         # We cannot write leases in share files, but allow them to be present
         # in case a share file is copied from a disk backend, or in case we

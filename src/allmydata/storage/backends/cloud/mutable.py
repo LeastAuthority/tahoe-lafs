@@ -73,15 +73,18 @@ class MutableCloudShare(CloudShareBase, CloudShareReaderMixin):
 
         if len(first_chunkdata) < self.HEADER_SIZE:
             msg = "%r had incomplete header (%d bytes)" % (self, len(first_chunkdata))
-            raise UnknownMutableContainerVersionError(msg)
+            raise UnknownMutableContainerVersionError(shnum, msg)
 
         header = first_chunkdata[:self.HEADER_SIZE]
-        (magic, write_enabler_nodeid, real_write_enabler,
-         data_length, extra_lease_offset) = struct.unpack(self.HEADER, header)
+        try:
+            (magic, write_enabler_nodeid, real_write_enabler,
+             data_length, extra_lease_offset) = struct.unpack(self.HEADER, header)
+        except struct.error, e:
+            raise CorruptShareError(shnum, "invalid mutable share header for shnum %d: %s" % (shnum, e))
 
         if magic != self.MAGIC:
             msg = "%r had magic %r but we wanted %r" % (self, magic, self.MAGIC)
-            raise UnknownMutableContainerVersionError(msg)
+            raise UnknownMutableContainerVersionError(shnum, msg)
 
         self._write_enabler_nodeid = write_enabler_nodeid
         self._real_write_enabler = real_write_enabler
