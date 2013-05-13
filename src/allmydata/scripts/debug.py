@@ -2,13 +2,114 @@
 # do not import any allmydata modules at this level. Do that from inside
 # individual functions instead.
 import struct, time, os, sys
+from collections import deque
 
 from twisted.python import usage, failure
 from twisted.internet import defer
 from twisted.scripts import trial as twisted_trial
 
 from foolscap.logging import cli as foolscap_cli
+
+from allmydata.util.assertutil import _assert
 from allmydata.scripts.common import BaseOptions
+
+
+class ChunkedShare(object):
+    def __init__(self, filename, preferred_chunksize):
+        self._filename = filename
+        self._position = 0
+        self._chunksize = os.stat(filename).st_size
+        self._total_size = self._chunksize
+        chunknum = 1
+        while True:
+            chunk_filename = self._get_chunk_filename(chunknum)
+            if not os.path.exists(chunk_filename):
+                break
+            size = os.stat(chunk_filename).st_size
+            _assert(size <= self._chunksize, size=size, chunksize=self._chunksize)
+            self._total_size += size
+            chunknum += 1
+
+        if self._chunksize == self._total_size:
+            # There is only one chunk, so we are at liberty to make the chunksize larger
+            # than that chunk, but not smaller.
+            self._chunksize = max(self._chunksize, preferred_chunksize)
+
+    def __repr__(self):
+        return "<ChunkedShare at %r>" % (self._filename,)
+
+    def seek(self, offset):
+        self._position = offset
+
+    def read(self, length):
+        data = self.pread(self._position, length)
+        self._position += len(data)
+        return data
+
+    def write(self, data):
+        self.pwrite(self._position, data)
+        self._position += len(data)
+
+    def pread(self, offset, length):
+        if offset + length > self._total_size:
+            length = max(0, self._total_size - offset)
+
+        pieces = deque()
+        chunknum    = offset / self._chunksize
+        read_offset = offset % self._chunksize
+        remaining   = length
+        while remaining > 0:
+            read_length = min(remaining, self._chunksize - read_offset)
+            _assert(read_length > 0, read_length=read_length)
+            pieces.append(self.read_from_chunk(chunknum, read_offset, read_length))
+            remaining -= read_length
+            read_offset = 0
+            chunknum += 1
+        return ''.join(pieces)
+
+    def _get_chunk_filename(self, chunknum):
+        if chunknum == 0:
+            return self._filename
+        else:
+            return "%s.%d" % (self._filename, chunknum)
+
+    def read_from_chunk(self, chunknum, offset, length):
+        f = open(self._get_chunk_filename(chunknum), "rb")
+        try:
+            f.seek(offset)
+            data = f.read(length)
+            _assert(len(data) == length, len_data = len(data), length=length)
+            return data
+        finally:
+            f.close()
+
+    def pwrite(self, offset, data):
+        if offset > self._total_size:
+            # fill the gap with zeroes
+            data = "\x00"*(offset + len(data) - self._total_size) + data
+            offset = self._total_size
+
+        self._total_size = max(self._total_size, offset + len(data))
+        chunknum     = offset / self._chunksize
+        write_offset = offset % self._chunksize
+        data_offset  = 0
+        remaining = len(data)
+        while remaining > 0:
+            write_length = min(remaining, self._chunksize - write_offset)
+            _assert(write_length > 0, write_length=write_length)
+            self.write_to_chunk(chunknum, write_offset, data[data_offset : data_offset + write_length])
+            remaining -= write_length
+            data_offset += write_length
+            write_offset = 0
+            chunknum += 1
+
+    def write_to_chunk(self, chunknum, offset, data):
+        f = open(self._get_chunk_filename(chunknum), "rw+b")
+        try:
+            f.seek(offset)
+            f.write(data)
+        finally:
+            f.close()
 
 
 class DumpOptions(BaseOptions):
@@ -38,8 +139,8 @@ verify-cap for the file that uses the share.
 
 
 def dump_share(options):
-    from allmydata.storage.backends.disk.disk_backend import get_disk_share
     from allmydata.util.encodingutil import quote_output
+    from allmydata.mutable.layout import MUTABLE_MAGIC, MAX_MUTABLE_SHARE_SIZE
 
     out = options.stdout
     filename = options['filename']
@@ -47,12 +148,12 @@ def dump_share(options):
     # check the version, to see if we have a mutable or immutable share
     print >>out, "share filename: %s" % quote_output(filename)
 
-    share = get_disk_share(filename)
+    share = ChunkedShare(filename, MAX_MUTABLE_SHARE_SIZE)
+    prefix = share.pread(0, len(MUTABLE_MAGIC))
 
-    if share.sharetype == "mutable":
+    if prefix == MUTABLE_MAGIC:
         return dump_mutable_share(options, share)
     else:
-        assert share.sharetype == "immutable", share.sharetype
         return dump_immutable_share(options, share)
 
 
@@ -68,13 +169,14 @@ def dump_immutable_chk_share(share, out, options):
     from allmydata.util import base32
     from allmydata.immutable.layout import ReadBucketProxy
     from allmydata.util.encodingutil import quote_output, to_str
+    from allmydata.storage.backends.disk.immutable import ImmutableDiskShare
+    DATA_OFFSET = ImmutableDiskShare.DATA_OFFSET
 
     # use a ReadBucketProxy to parse the bucket and find the uri extension
     bp = ReadBucketProxy(None, None, '')
-    f = open(share._get_path(), "rb")
-    # XXX yuck, private API
+
     def read_share_data(offset, length):
-        return share._read_share_data(f, offset, length)
+        return share.pread(offset + DATA_OFFSET, length)
 
     offsets = bp._parse_offsets(read_share_data(0, 0x44))
     print >>out, "%20s: %d" % ("version", bp._version)
@@ -142,11 +244,11 @@ def dump_immutable_chk_share(share, out, options):
     if options['offsets']:
         print >>out
         print >>out, " Section Offsets:"
-        print >>out, "%20s: %s" % ("share data", share.DATA_OFFSET)
+        print >>out, "%20s: %s" % ("share data", DATA_OFFSET)
         for k in ["data", "plaintext_hash_tree", "crypttext_hash_tree",
                   "block_hashes", "share_hashes", "uri_extension"]:
             name = {"data": "block data"}.get(k,k)
-            offset = share.DATA_OFFSET + offsets[k]
+            offset = DATA_OFFSET + offsets[k]
             print >>out, "  %20s: %s   (0x%x)" % (name, offset, offset)
 
 
@@ -163,21 +265,22 @@ def format_expiration_time(expiration_time):
 
 def dump_mutable_share(options, m):
     from allmydata.util import base32, idlib
+    from allmydata.storage.backends.disk.mutable import MutableDiskShare
+    DATA_OFFSET = MutableDiskShare.DATA_OFFSET
+
     out = options.stdout
-    f = open(options['filename'], "rb")
-    WE, nodeid = m._read_write_enabler_and_nodeid(f)
-    data_length = m._read_data_length(f)
-    container_size = m._read_container_size(f)
+
+    WE, nodeid = MutableDiskShare._read_write_enabler_and_nodeid(m)
+    data_length = MutableDiskShare._read_data_length(m)
+    container_size = MutableDiskShare._read_container_size(m)
 
     share_type = "unknown"
-    f.seek(m.DATA_OFFSET)
-    version = f.read(1)
+    version = m.pread(DATA_OFFSET, 1)
     if version == "\x00":
         # this slot contains an SMDF share
         share_type = "SDMF"
     elif version == "\x01":
         share_type = "MDMF"
-    f.close()
 
     print >>out
     print >>out, "Mutable slot found:"
@@ -202,25 +305,19 @@ def dump_SDMF_share(m, length, options):
     from allmydata.util import base32, hashutil
     from allmydata.uri import SSKVerifierURI
     from allmydata.util.encodingutil import quote_output, to_str
-
-    offset = m.DATA_OFFSET
+    from allmydata.storage.backends.disk.mutable import MutableDiskShare
+    DATA_OFFSET = MutableDiskShare.DATA_OFFSET
 
     out = options.stdout
 
-    f = open(options['filename'], "rb")
-    f.seek(offset)
-    data = f.read(min(length, 2000))
-    f.close()
+    data = m.pread(DATA_OFFSET, min(length, 2000))
 
     try:
         pieces = unpack_share(data)
     except NeedMoreDataError, e:
         # retry once with the larger size
         size = e.needed_bytes
-        f = open(options['filename'], "rb")
-        f.seek(offset)
-        data = f.read(min(length, size))
-        f.close()
+        data = m.pread(DATA_OFFSET, min(length, size))
         pieces = unpack_share(data)
 
     (seqnum, root_hash, IV, k, N, segsize, datalen,
@@ -264,21 +361,19 @@ def dump_SDMF_share(m, length, options):
         print >>out, " Section Offsets:"
         def printoffset(name, value, shift=0):
             print >>out, "%s%20s: %s   (0x%x)" % (" "*shift, name, value, value)
-        printoffset("end of header", m.HEADER_SIZE)
-        printoffset("share data", m.DATA_OFFSET)
-        o_seqnum = m.DATA_OFFSET + struct.calcsize(">B")
+        printoffset("end of header", MutableDiskShare.HEADER_SIZE)
+        printoffset("share data", DATA_OFFSET)
+        o_seqnum = DATA_OFFSET + struct.calcsize(">B")
         printoffset("seqnum", o_seqnum, 2)
-        o_root_hash = m.DATA_OFFSET + struct.calcsize(">BQ")
+        o_root_hash = DATA_OFFSET + struct.calcsize(">BQ")
         printoffset("root_hash", o_root_hash, 2)
         for k in ["signature", "share_hash_chain", "block_hash_tree",
                   "share_data",
                   "enc_privkey", "EOF"]:
             name = {"share_data": "block data",
                     "EOF": "end of share data"}.get(k,k)
-            offset = m.DATA_OFFSET + offsets[k]
+            offset = DATA_OFFSET + offsets[k]
             printoffset(name, offset, 2)
-        f = open(options['filename'], "rb")
-        f.close()
 
     print >>out
 
@@ -288,19 +383,18 @@ def dump_MDMF_share(m, length, options):
     from allmydata.util import base32, hashutil
     from allmydata.uri import MDMFVerifierURI
     from allmydata.util.encodingutil import quote_output, to_str
+    from allmydata.storage.backends.disk.mutable import MutableDiskShare
+    DATA_OFFSET = MutableDiskShare.DATA_OFFSET
 
-    offset = m.DATA_OFFSET
     out = options.stdout
 
-    f = open(options['filename'], "rb")
     storage_index = None; shnum = 0
 
     class ShareDumper(MDMFSlotReadProxy):
         def _read(self, readvs, force_remote=False, queue=False):
             data = []
             for (where,length) in readvs:
-                f.seek(offset+where)
-                data.append(f.read(length))
+                data.append(m.pread(DATA_OFFSET + where, length))
             return defer.succeed({shnum: data})
 
     p = ShareDumper(None, storage_index, shnum)
@@ -318,7 +412,6 @@ def dump_MDMF_share(m, length, options):
     pubkey = extract(p.get_verification_key)
     block_hash_tree = extract(p.get_blockhashes)
     share_hash_chain = extract(p.get_sharehashes)
-    f.close()
 
     (seqnum, root_hash, salt_to_use, segsize, datalen, k, N, prefix,
      offsets) = verinfo
@@ -359,11 +452,11 @@ def dump_MDMF_share(m, length, options):
         print >>out, " Section Offsets:"
         def printoffset(name, value, shift=0):
             print >>out, "%s%.20s: %s   (0x%x)" % (" "*shift, name, value, value)
-        printoffset("end of header", m.HEADER_SIZE, 2)
-        printoffset("share data", m.DATA_OFFSET, 2)
-        o_seqnum = m.DATA_OFFSET + struct.calcsize(">B")
+        printoffset("end of header", MutableDiskShare.HEADER_SIZE, 2)
+        printoffset("share data", DATA_OFFSET, 2)
+        o_seqnum = DATA_OFFSET + struct.calcsize(">B")
         printoffset("seqnum", o_seqnum, 4)
-        o_root_hash = m.DATA_OFFSET + struct.calcsize(">BQ")
+        o_root_hash = DATA_OFFSET + struct.calcsize(">BQ")
         printoffset("root_hash", o_root_hash, 4)
         for k in ["enc_privkey", "share_hash_chain", "signature",
                   "verification_key", "verification_key_end",
@@ -372,10 +465,8 @@ def dump_MDMF_share(m, length, options):
                     "verification_key": "pubkey",
                     "verification_key_end": "end of pubkey",
                     "EOF": "end of share data"}.get(k,k)
-            offset = m.DATA_OFFSET + offsets[k]
+            offset = DATA_OFFSET + offsets[k]
             printoffset(name, offset, 4)
-        f = open(options['filename'], "rb")
-        f.close()
 
     print >>out
 
@@ -558,7 +649,7 @@ class FindSharesOptions(BaseOptions):
         t += """
 Locate all shares for the given storage index. This command looks through one
 or more node directories to find the shares. It returns a list of filenames,
-one per line, for each share file found.
+one per line, for the initial chunk of each share found.
 
  tahoe debug find-shares 4vozh77tsrw7mdhnj7qvp5ky74 testgrid/node-*
 
@@ -644,32 +735,26 @@ def call(c, *args, **kwargs):
 
 def describe_share(abs_sharefile, si_s, shnum_s, now, out):
     from allmydata import uri
-    from allmydata.storage.backends.disk.disk_backend import get_disk_share
-    from allmydata.storage.common import UnknownMutableContainerVersionError, UnknownImmutableContainerVersionError
-    from allmydata.mutable.layout import unpack_share
+    from allmydata.storage.backends.disk.immutable import ImmutableDiskShare
+    from allmydata.storage.backends.disk.mutable import MutableDiskShare
+    from allmydata.mutable.layout import unpack_share, MUTABLE_MAGIC, MAX_MUTABLE_SHARE_SIZE
     from allmydata.mutable.common import NeedMoreDataError
     from allmydata.immutable.layout import ReadBucketProxy
     from allmydata.util import base32
     from allmydata.util.encodingutil import quote_output
 
-    try:
-        share = get_disk_share(abs_sharefile)
-    except UnknownMutableContainerVersionError:
-        print >>out, "UNKNOWN mutable %s" % quote_output(abs_sharefile)
-        return
-    except UnknownImmutableContainerVersionError:
-        print >>out, "UNKNOWN really-unknown %s" % quote_output(abs_sharefile)
-        return
+    share = ChunkedShare(abs_sharefile, MAX_MUTABLE_SHARE_SIZE)
+    prefix = share.pread(0, len(MUTABLE_MAGIC))
 
-    f = open(abs_sharefile, "rb")
+    if prefix == MUTABLE_MAGIC:
+        def read_share_data(offset, length):
+            return share.pread(offset + MutableDiskShare.DATA_OFFSET, length)
 
-    if share.sharetype == "mutable":
-        WE, nodeid = share._read_write_enabler_and_nodeid(f)
-        data_length = share._read_data_length(f)
+        WE, nodeid = MutableDiskShare._read_write_enabler_and_nodeid(share)
+        data_length = MutableDiskShare._read_data_length(share)
 
         share_type = "unknown"
-        f.seek(share.DATA_OFFSET)
-        version = f.read(1)
+        version = read_share_data(0, 1)
         if version == "\x00":
             # this slot contains an SMDF share
             share_type = "SDMF"
@@ -677,16 +762,14 @@ def describe_share(abs_sharefile, si_s, shnum_s, now, out):
             share_type = "MDMF"
 
         if share_type == "SDMF":
-            f.seek(share.DATA_OFFSET)
-            data = f.read(min(data_length, 2000))
+            data = read_share_data(0, min(data_length, 2000))
 
             try:
                 pieces = unpack_share(data)
             except NeedMoreDataError, e:
                 # retry once with the larger size
                 size = e.needed_bytes
-                f.seek(share.DATA_OFFSET)
-                data = f.read(min(data_length, size))
+                data = read_share_data(0, min(data_length, size))
                 pieces = unpack_share(data)
             (seqnum, root_hash, IV, k, N, segsize, datalen,
              pubkey, signature, share_hash_chain, block_hash_tree,
@@ -704,8 +787,7 @@ def describe_share(abs_sharefile, si_s, shnum_s, now, out):
                 def _read(self, readvs, force_remote=False, queue=False):
                     data = []
                     for (where,length) in readvs:
-                        f.seek(share.DATA_OFFSET+where)
-                        data.append(f.read(length))
+                        data.append(read_share_data(where, length))
                     return defer.succeed({fake_shnum: data})
 
             p = ShareDumper(None, "fake-si", fake_shnum)
@@ -738,7 +820,7 @@ def describe_share(abs_sharefile, si_s, shnum_s, now, out):
             def __repr__(self):
                 return "<ImmediateReadBucketProxy>"
             def _read(self, offset, size):
-                return defer.maybeDeferred(self.share.read_share_data, offset, size)
+                return defer.maybeDeferred(self.share.pread, ImmutableDiskShare.DATA_OFFSET + offset, size)
 
         # use a ReadBucketProxy to parse the bucket and find the uri extension
         bp = ImmediateReadBucketProxy(share)
@@ -753,8 +835,6 @@ def describe_share(abs_sharefile, si_s, shnum_s, now, out):
 
         print >>out, "CHK %s %d/%d %d %s - %s" % (si_s, k, N, filesize, ueb_hash,
                                                   quote_output(abs_sharefile))
-
-    f.close()
 
 
 def catalog_shares(options):
@@ -842,8 +922,9 @@ def corrupt_share(options):
 
 def do_corrupt_share(out, filename, offset="block-random"):
     import random
-    from allmydata.storage.backends.disk.disk_backend import get_disk_share
-    from allmydata.mutable.layout import unpack_header
+    from allmydata.storage.backends.disk.immutable import ImmutableDiskShare
+    from allmydata.storage.backends.disk.mutable import MutableDiskShare
+    from allmydata.mutable.layout import unpack_header, MUTABLE_MAGIC, MAX_MUTABLE_SHARE_SIZE
     from allmydata.immutable.layout import ReadBucketProxy
 
     assert offset == "block-random", "other offsets not implemented"
@@ -864,36 +945,28 @@ def do_corrupt_share(out, filename, offset="block-random"):
 
     # what kind of share is it?
 
-    share = get_disk_share(filename)
-    if share.sharetype == "mutable":
-        f = open(filename, "rb")
-        try:
-            f.seek(share.DATA_OFFSET)
-            data = f.read(2000)
-            # make sure this slot contains an SMDF share
-            assert data[0] == "\x00", "non-SDMF mutable shares not supported"
-        finally:
-            f.close()
+    share = ChunkedShare(filename, MAX_MUTABLE_SHARE_SIZE)
+    prefix = share.pread(0, len(MUTABLE_MAGIC))
+
+    if prefix == MUTABLE_MAGIC:
+        data = share.pread(MutableDiskShare.DATA_OFFSET, 2000)
+        # make sure this slot contains an SMDF share
+        assert data[0] == "\x00", "non-SDMF mutable shares not supported"
 
         (version, ig_seqnum, ig_roothash, ig_IV, ig_k, ig_N, ig_segsize,
          ig_datalen, offsets) = unpack_header(data)
 
         assert version == 0, "we only handle v0 SDMF files"
-        start = share.DATA_OFFSET + offsets["share_data"]
-        end = share.DATA_OFFSET + offsets["enc_privkey"]
+        start = MutableDiskShare.DATA_OFFSET + offsets["share_data"]
+        end = MutableDiskShare.DATA_OFFSET + offsets["enc_privkey"]
         flip_bit(start, end)
     else:
         # otherwise assume it's immutable
         bp = ReadBucketProxy(None, None, '')
-        f = open(filename, "rb")
-        try:
-            # XXX yuck, private API
-            header = share._read_share_data(f, 0, 0x24)
-        finally:
-            f.close()
+        header = share.pread(ImmutableDiskShare.DATA_OFFSET, 0x24)
         offsets = bp._parse_offsets(header)
-        start = share.DATA_OFFSET + offsets["data"]
-        end = share.DATA_OFFSET + offsets["plaintext_hash_tree"]
+        start = ImmutableDiskShare.DATA_OFFSET + offsets["data"]
+        end = ImmutableDiskShare.DATA_OFFSET + offsets["plaintext_hash_tree"]
         flip_bit(start, end)
 
 
