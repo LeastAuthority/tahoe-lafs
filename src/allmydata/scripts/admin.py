@@ -44,12 +44,35 @@ def derive_pubkey(options):
     print >>out, "public:", pubkey_vs
     return 0
 
+
+class CreateContainerOptions(BaseOptions):
+    def getSynopsis(self):
+        return "Usage: %s [global-opts] admin create-container" % (self.command_name,)
+
+    def getUsage(self, width=None):
+        t = BaseOptions.getUsage(self, width)
+        t += """
+Create a storage container, using the name and credentials configured in
+tahoe.cfg. This is needed only for the cloud backend, and only if the
+container has not already been created. See <docs/backends/cloud.rst>
+for more details.
+"""
+        return t
+
+def create_container(options):
+    err = options.stderr
+    print >>err, "Not implemented."
+    return 1
+
+
 class AdminCommand(BaseOptions):
     subCommands = [
         ("generate-keypair", None, GenerateKeypairOptions,
          "Generate a public/private keypair, write to stdout."),
         ("derive-pubkey", None, DerivePubkeyOptions,
          "Derive a public key from a private key."),
+        ("create-container", None, CreateContainerOptions,
+         "Create a container for the configured cloud backend."),
         ]
     def postOptions(self):
         if not hasattr(self, 'subOptions'):
@@ -67,6 +90,7 @@ each subcommand.
 subDispatch = {
     "generate-keypair": print_keypair,
     "derive-pubkey": derive_pubkey,
+    "create-container": create_container,
     }
 
 def do_admin(options):
