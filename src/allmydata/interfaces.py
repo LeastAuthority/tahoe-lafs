@@ -126,6 +126,40 @@ class RIStorageServer(RemoteInterface):
         return TupleOf(SetOf(int, maxLength=MAX_BUCKETS),
                        DictOf(int, RIBucketWriter, maxKeys=MAX_BUCKETS))
 
+    def add_or_renew_leases(storage_index=StorageIndex,
+                            sharenums=SetOf(int, maxLength=MAX_BUCKETS),
+                            requested_duration_seconds=int):
+        """
+        Renew leases on the specified shares, or add them where there is no
+        existing lease, requesting the given lease duration in seconds.
+
+        Returns a tuple (accepted_duration_seconds, set_of_leased_sharenums).
+
+        The accepted lease duration may be smaller than the requested duration.
+        It is possible that one or more of the shares is actually leased for a
+        longer duration than the accepted value, due to existing leases added
+        by this or other accounts.
+
+        If no error occurs, the returned set of leased sharenums will be the
+        intersection of the sharenums specified by the caller, and the sharenums
+        actually held by the server. (This avoids race conditions where a client
+        enumerates the current set of shares, then some expire before they can
+        be leased. That is, the returned sharenums are guaranteed still to be held.)
+
+        Server expiration policy might result in shares being deleted before the
+        accepted lease duration returned by this method, but this should not
+        normally happen without intervention to change the configured policy
+        (for this account or globally), or to explicitly delete shares.
+
+        Servers that support this method will advertise a true value for the
+        'supports-selective-lease-renewal' key (under
+        'http://allmydata.org/tahoe/protocols/storage/v1') in their
+        version information. For backward compatibility with previous Tahoe-LAFS
+        storage servers that do not support this method, clients should fall back
+        to remote_add_lease (which will also renew existing leases).
+        """
+        return TupleOf(int, SetOf(int, maxLength=MAX_BUCKETS))
+
     def add_lease(storage_index=StorageIndex,
                   renew_secret=LeaseRenewSecret,
                   cancel_secret=LeaseCancelSecret):
@@ -159,13 +193,17 @@ class RIStorageServer(RemoteInterface):
         renew_secret is ignored as of Tahoe-LAFS v1.11.0, but for backward
         compatibility with older servers, should be calculated in the same
         way as previous clients (see
-        allmydata.util.hashutil.file_renewal_secret_hash). In versions
-        prior to v1.X.0, this method would only renew leases with the given
-        renew_secret.
+        allmydata.util.hashutil.file_renewal_secret_hash). In versions prior to
+        v1.X.0, this method would only renew leases with the given renew_secret.
 
         Note that as of Tahoe-LAFS v1.11.0, the lease database does not retain
         information about the node ids of lease holders, so if an IndexError
         is raised for a mutable share, it no longer includes that information.
+
+        This method is deprecated. The preferred behaviour is to use
+        the remote_add_or_renew_leases method for servers that advertise
+        'supports-selective-lease-renewal', falling back to remote_add_lease
+        (which will also renew existing leases) for other servers.
         """
         return Any() # always None
 
