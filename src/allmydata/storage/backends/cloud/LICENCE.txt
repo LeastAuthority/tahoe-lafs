@@ -6,7 +6,7 @@ Free and Open Source terms.
 The copyright holder, https://LeastAuthority.com, hereby grants you a licence
 to use the contents of this directory, *excluding* the subdirectories
 "googlestorage", "msazure", "openstack", and "s3", under the same terms as
-Tahoe-LAFS itself (see the README.rst file in the root directory of the
+Tahoe-LAFS itself (see the README.txt file in the root directory of the
 Tahoe-LAFS source distribution for those terms).
 
 The copyright holder, https://LeastAuthority.com, hereby grants you a licence
@@ -21,7 +21,7 @@ software. That is because the software that this is a derived work of —
 Tahoe-LAFS — is distributed under the terms of the Transitive Grace Period
 Public Licence, which allows us to distribute our derived work of Tahoe-LAFS
 without open-sourcing our derived work, but only for up to 12 months.
-therefore, you will have the legal right to use this software under the full
+Therefore, you will have the legal right to use this software under the full
 Free and Open Source terms of the Transitive Grace Period Public Licence 12
 months after this software was first distributed or hosted.
 
