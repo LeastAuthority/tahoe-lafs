@@ -120,6 +120,12 @@ def ls_container(options):
     d.addCallbacks(lambda ign: os._exit(0), lambda ign: os._exit(1))
     reactor.run()
 
+def format_date(date):
+    datestr = str(date)
+    if datestr.endswith('+00:00'):
+        datestr = datestr[: -6] + 'Z'
+    return datestr
+
 def do_ls_container(options):
     from twisted.internet import defer
     from allmydata.node import ConfigOnly
@@ -136,9 +142,9 @@ def do_ls_container(options):
         d2 = backend.list_container()
         def _done(items):
             print >>out, "Listing %d object(s):" % len(items)
-            print >>out, "  Size  Last modified         Key"
+            print >>out, "    Size  Last modified         Key"
             for item in items:
-                print >>out, "% 6s  %20s  %s" % (item.size, item.modification_date, item.key)
+                print >>out, "% 8s  %20s  %s" % (item.size, format_date(item.modification_date), item.key)
         d2.addCallback(_done)
         return d2
     d.addCallback(_do_create)
