@@ -138,7 +138,7 @@ def do_ls_container(options):
             print >>out, "Listing %d object(s):" % len(items)
             print >>out, "  Size  Last modified         Key"
             for item in items:
-                print >>out, "%6d  %20s  %s" % (item.size, item.modification_date, item.key)
+                print >>out, "% 6s  %20s  %s" % (item.size, item.modification_date, item.key)
         d2.addCallback(_done)
         return d2
     d.addCallback(_do_create)
