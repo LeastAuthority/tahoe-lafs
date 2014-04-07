@@ -137,6 +137,11 @@ def do_ls_container(options):
     d = defer.succeed(None)
     def _do_create(ign):
         config = ConfigOnly(options['basedir'])
+        if not config.get_config("storage", "enabled", True, boolean=True):
+            raise AssertionError("'tahoe admin ls-container' is intended for administration of nodes running "+
+                         "a storage service. The node with base directory "+options['basedir']+" is not "+
+                         "configured to provide storage.")
+
         (backend, _) = Client.configure_backend(config)
 
         d2 = backend.list_container()
