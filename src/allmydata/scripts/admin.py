@@ -2,6 +2,7 @@
 import os
 
 from twisted.python import usage
+from allmydata.util.encodingutil import quote_output
 from allmydata.scripts.common import BaseOptions, BasedirOptions
 
 class GenerateKeypairOptions(BaseOptions):
@@ -139,7 +140,7 @@ def do_ls_container(options):
         config = ConfigOnly(options['basedir'])
         if not config.get_config("storage", "enabled", True, boolean=True):
             raise AssertionError("'tahoe admin ls-container' is intended for administration of nodes running "+
-                         "a storage service. The node with base directory "+options['basedir']+" is not "+
+                         "a storage service. The node with base directory "+quote_output(options['basedir'])+" is not "+
                          "configured to provide storage.")
 
         (backend, _) = Client.configure_backend(config)
