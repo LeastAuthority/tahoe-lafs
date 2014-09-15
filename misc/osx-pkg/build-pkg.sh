@@ -1,7 +1,7 @@
 #!/bin/bash
 
 VERSION=1.10.0
-PKGNAME=allmydata-tahoe
+PKGNAME=tahoe-lafs
 SCRIPTBASE=`pwd`
 
 cleanup()
@@ -11,9 +11,8 @@ cleanup()
 
 fetch_src ()
 {
-    tempfoo=`basename $(pwd)`
     TMPDIR=$SCRIPTBASE
-    SRCDIR=`mktemp -d -t ${tempfoo}`
+    SRCDIR=`mktemp -d -t ${TMPDIR}`
 
     echo "fetching the repository ..."
     wget https://tahoe-lafs.org/source/tahoe-lafs/releases/$PKGNAME-$VERSION.zip -O $SRCDIR/$PKGNAME-$VERSION.zip || exit 1
@@ -23,7 +22,7 @@ unzip_src()
 {
     CURDIR=`pwd`
     cd $SRCDIR
-    unzip $PKGNAME-$VERSION.zip    
+    unzip $PKGNAME-$VERSION.zip
 }
 
 build_src()
@@ -42,7 +41,7 @@ create_pkg()
     # create component pkg
     pkgbuild --root osx-pkg \
         --identifier com.leastauthority.tahoe \
-        --version 1.10.0 \
+        --version $VERSION \
         --ownership recommended \
         --install-location /Applications/tahoe.app \
         --scripts $SCRIPTBASE/scripts \
