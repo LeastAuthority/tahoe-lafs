@@ -36,7 +36,6 @@ create_pkg()
     cd $SRCDIR
     mkdir osx-pkg
     cp -r $PKGNAME-$VERSION/* osx-pkg/
-    cp $SCRIPTBASE/tahoe osx-pkg/
 
     # create component pkg
     pkgbuild --root osx-pkg \
