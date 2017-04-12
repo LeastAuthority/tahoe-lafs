@@ -1,14 +1,33 @@
 
-import os, sys, signal, time
+import os, sys
 from allmydata.scripts.common import BasedirOptions
 from twisted.scripts import twistd
 from twisted.python import usage
+from twisted.python.reflect import namedAny
 from allmydata.scripts.default_nodedir import _default_nodedir
 from allmydata.util import fileutil
 from allmydata.util.encodingutil import listdir_unicode, quote_local_unicode_path
+from twisted.application.service import Service
 
 
-class StartOptions(BasedirOptions):
+def identify_node_type(basedir):
+    """
+    :return unicode: None or one of: 'client', 'introducer',
+        'key-generator' or 'stats-gatherer'
+    """
+    tac = u''
+    for fn in listdir_unicode(basedir):
+        if fn.endswith(u".tac"):
+            tac = fn
+            break
+
+    for t in (u"client", u"introducer", u"key-generator", u"stats-gatherer"):
+        if t in tac:
+            return t
+    return None
+
+
+class DaemonizeOptions(BasedirOptions):
     subcommand_name = "start"
     optParameters = [
         ("basedir", "C", None,
@@ -44,67 +63,70 @@ the twistd-options.
 """
         return t
 
-class StopOptions(BasedirOptions):
-    def parseArgs(self, basedir=None):
-        BasedirOptions.parseArgs(self, basedir)
-
-    def getSynopsis(self):
-        return ("Usage:  %s [global-options] stop [options] [NODEDIR]"
-                % (self.command_name,))
-
-class RestartOptions(StartOptions):
-    subcommand_name = "restart"
-
-class RunOptions(StartOptions):
-    subcommand_name = "run"
-
 
 class MyTwistdConfig(twistd.ServerOptions):
-    subCommands = [("StartTahoeNode", None, usage.Options, "node")]
+    subCommands = [("DaemonizeTahoeNode", None, usage.Options, "node")]
 
-class StartTahoeNodePlugin:
-    tapname = "tahoenode"
-    def __init__(self, nodetype, basedir):
+
+class DaemonizeTheRealService(Service):
+
+    def __init__(self, nodetype, basedir, options):
         self.nodetype = nodetype
         self.basedir = basedir
-    def makeService(self, so):
+
+    def startService(self):
         # delay this import as late as possible, to allow twistd's code to
         # accept --reactor= selection. N.B.: this can't actually work until
         # this file, and all the __init__.py files above it, also respect the
         # prohibition on importing anything that transitively imports
         # twisted.internet.reactor . That will take a lot of work.
-        if self.nodetype == "client":
-            from allmydata.client import Client
-            return Client(self.basedir)
-        if self.nodetype == "introducer":
-            from allmydata.introducer.server import IntroducerNode
-            return IntroducerNode(self.basedir)
-        if self.nodetype == "key-generator":
+
+        def key_generator_removed():
             raise ValueError("key-generator support removed, see #2783")
-        if self.nodetype == "stats-gatherer":
-            from allmydata.stats import StatsGathererService
-            return StatsGathererService(verbose=True)
-        raise ValueError("unknown nodetype %s" % self.nodetype)
 
-def identify_node_type(basedir):
-    for fn in listdir_unicode(basedir):
-        if fn.endswith(u".tac"):
-            tac = str(fn)
-            break
-    else:
-        return None
+        def start():
+            node_to_instance = {
+                u"client": lambda: namedAny("allmydata.client.Client")(self.basedir),
+                u"introducer": lambda: namedAny("allmydata.introducer.server.IntroducerNode")(self.basedir),
+                u"stats-gatherer": lambda: namedAny("allmydata.stats.StatsGathererService")(self.basedir, verbose=True),
+                u"key-generator": key_generator_removed,
+            }
 
-    for t in ("client", "introducer", "key-generator", "stats-gatherer"):
-        if t in tac:
-            return t
-    return None
+            try:
+                service_factory = node_to_instance[self.nodetype]
+            except KeyError:
+                raise ValueError("unknown nodetype %s" % self.nodetype)
 
-def start(config):
+            srv = service_factory()
+            srv.setServiceParent(self.parent)
+
+        from twisted.internet import reactor
+        reactor.callWhenRunning(start)
+
+
+class DaemonizeTahoeNodePlugin(object):
+    tapname = "tahoenode"
+    def __init__(self, nodetype, basedir):
+        self.nodetype = nodetype
+        self.basedir = basedir
+
+    def makeService(self, so):
+        return DaemonizeTheRealService(self.nodetype, self.basedir, so)
+
+
+def daemonize(config):
+    """
+    Runs the 'tahoe daemonize' command.
+
+    Sets up the IService instance corresponding to the type of node
+    that's starting and uses Twisted's twistd runner to disconnect our
+    process from the terminal.
+    """
     out = config.stdout
     err = config.stderr
     basedir = config['basedir']
     quoted_basedir = quote_local_unicode_path(basedir)
-    print >>out, "STARTING", quoted_basedir
+    print >>out, "daemonizing in {}".format(quoted_basedir)
     if not os.path.isdir(basedir):
         print >>err, "%s does not look like a directory at all" % quoted_basedir
         return 1
@@ -116,14 +138,14 @@ def start(config):
     # of no return.
     os.chdir(basedir)
     twistd_args = []
-    if (nodetype in ("client", "introducer")
+    if (nodetype in (u"client", u"introducer")
         and "--nodaemon" not in config.twistd_args
         and "--syslog" not in config.twistd_args
         and "--logfile" not in config.twistd_args):
         fileutil.make_dirs(os.path.join(basedir, u"logs"))
         twistd_args.extend(["--logfile", os.path.join("logs", "twistd.log")])
     twistd_args.extend(config.twistd_args)
-    twistd_args.append("StartTahoeNode") # point at our StartTahoeNodePlugin
+    twistd_args.append("DaemonizeTahoeNode") # point at our DaemonizeTahoeNodePlugin
 
     twistd_config = MyTwistdConfig()
     try:
@@ -133,7 +155,7 @@ def start(config):
         print >>err, config
         print >>err, "tahoe %s: usage error from twistd: %s\n" % (config.subcommand_name, ue)
         return 1
-    twistd_config.loadedPlugins = {"StartTahoeNode": StartTahoeNodePlugin(nodetype, basedir)}
+    twistd_config.loadedPlugins = {"DaemonizeTahoeNode": DaemonizeTahoeNodePlugin(nodetype, basedir)}
 
     # On Unix-like platforms:
     #   Unless --nodaemon was provided, the twistd.runApp() below spawns off a
@@ -170,98 +192,3 @@ def start(config):
     twistd.runApp(twistd_config)
     # we should only reach here if --nodaemon or equivalent was used
     return 0
-
-def stop(config):
-    out = config.stdout
-    err = config.stderr
-    basedir = config['basedir']
-    quoted_basedir = quote_local_unicode_path(basedir)
-    print >>out, "STOPPING", quoted_basedir
-    pidfile = os.path.join(basedir, u"twistd.pid")
-    if not os.path.exists(pidfile):
-        print >>err, "%s does not look like a running node directory (no twistd.pid)" % quoted_basedir
-        # we define rc=2 to mean "nothing is running, but it wasn't me who
-        # stopped it"
-        return 2
-    with open(pidfile, "r") as f:
-        pid = f.read()
-    pid = int(pid)
-
-    # kill it hard (SIGKILL), delete the twistd.pid file, then wait for the
-    # process itself to go away. If it hasn't gone away after 20 seconds, warn
-    # the user but keep waiting until they give up.
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError, oserr:
-        if oserr.errno == 3:
-            print oserr.strerror
-            # the process didn't exist, so wipe the pid file
-            os.remove(pidfile)
-            return 2
-        else:
-            raise
-    try:
-        os.remove(pidfile)
-    except EnvironmentError:
-        pass
-    start = time.time()
-    time.sleep(0.1)
-    wait = 40
-    first_time = True
-    while True:
-        # poll once per second until we see the process is no longer running
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            print >>out, "process %d is dead" % pid
-            return
-        wait -= 1
-        if wait < 0:
-            if first_time:
-                print >>err, ("It looks like pid %d is still running "
-                              "after %d seconds" % (pid,
-                                                    (time.time() - start)))
-                print >>err, "I will keep watching it until you interrupt me."
-                wait = 10
-                first_time = False
-            else:
-                print >>err, "pid %d still running after %d seconds" % \
-                      (pid, (time.time() - start))
-                wait = 10
-        time.sleep(1)
-    # we define rc=1 to mean "I think something is still running, sorry"
-    return 1
-
-def restart(config):
-    stderr = config.stderr
-    rc = stop(config)
-    if rc == 2:
-        print >>stderr, "ignoring couldn't-stop"
-        rc = 0
-    if rc:
-        print >>stderr, "not restarting"
-        return rc
-    return start(config)
-
-def run(config):
-    config.twistd_args = config.twistd_args + ("--nodaemon",)
-    # Previously we would do the equivalent of adding ("--logfile",
-    # "tahoesvc.log"), but that redirects stdout/stderr which is often
-    # unhelpful, and the user can add that option explicitly if they want.
-
-    return start(config)
-
-
-subCommands = [
-    ["start", None, StartOptions, "Start a node (of any type)."],
-    ["stop", None, StopOptions, "Stop a node."],
-    ["restart", None, RestartOptions, "Restart a node."],
-    ["run", None, RunOptions, "Run a node synchronously."],
-]
-
-dispatch = {
-    "start": start,
-    "stop": stop,
-    "restart": restart,
-    "run": run,
-    }

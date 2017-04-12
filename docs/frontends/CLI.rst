@@ -83,12 +83,13 @@ the command line.
 Node Management
 ===============
 
-"``tahoe create-node [NODEDIR]``" is the basic make-a-new-node command. It
-creates a new directory and populates it with files that will allow the
-"``tahoe start``" command to use it later on. This command creates nodes that
-have client functionality (upload/download files), web API services
-(controlled by the '[node]web.port' configuration), and storage services
-(unless ``--no-storage`` is specified).
+"``tahoe create-node [NODEDIR]``" is the basic make-a-new-node
+command. It creates a new directory and populates it with files that
+will allow the "``tahoe start``" and related commands to use it later
+on. `tahoe create-node` creates nodes that have client functionality
+(upload/download files), web API services (controlled by the
+'[node]web.port' configuration), and storage services (unless
+``--no-storage`` is specified).
 
 NODEDIR defaults to ``~/.tahoe/`` , and newly-created nodes default to
 publishing a web server on port 3456 (limited to the loopback interface, at
@@ -105,13 +106,29 @@ This node provides introduction services and nothing else. When started, this
 node will produce a ``private/introducer.furl`` file, which should be
 published to all clients.
 
-"``tahoe run [NODEDIR]``" will start a previously-created node in the foreground.
+"``tahoe run [NODEDIR]``" will start a previously-created node in the
+foreground. This is the recommended way to run Tahoe nodes and
+functions the same on all platforms. If you want to run the process as
+a daemon, it is recommended that you use your favourite daemonization
+tool.
 
-"``tahoe start [NODEDIR]``" will launch a previously-created node. It will
-launch the node into the background, using the standard Twisted "``twistd``"
-daemon-launching tool. On some platforms (including Windows) this command is
-unable to run a daemon in the background; in that case it behaves in the
-same way as "``tahoe run``".
+"``tahoe daemonize [NODEDIR]``" will use Twisted's "``twistd``"
+daemonization tool to start a previously-created node in the
+background. This will exit immediately and you must look to the logs
+for any errors during startup. On some platforms (including Windows)
+this command is unable to run a daemon in the background; in that case
+it behaves in the same way as "``tahoe run``". It is better to use
+``tahoe run`` with your favourite daemonization tool.
+
+"``tahoe start [NODEDIR]``" will launch a previously-created node. It
+will launch the node into the background using ``tahoe daemonize``. On
+some platforms (including Windows) this command is unable to run a
+daemon in the background; in that case it behaves in the same way as
+"``tahoe run``". `tahoe start` also monitors the logs for up to 5
+seconds looking for either a succesful startup message or for early
+failure messages and produces an appropriate exit code.  You are
+encouraged to use `tahoe run` along with your favourite daemonization
+tool instead of this.
 
 "``tahoe stop [NODEDIR]``" will shut down a running node.
 
