@@ -106,6 +106,9 @@ class NullShareSet(ShareSet):
             self._mutable_shnums.remove(shnum)
         return defer.succeed(None)
 
+    def _clean_up_after_unlink(self):
+        pass
+
     def has_incoming(self, shnum):
         return shnum in self._incoming_shnums
 
@@ -121,6 +124,10 @@ class NullShareSet(ShareSet):
         bw = BucketWriter(account, immutableshare, canary)
         bw.throw_out_all_data = True
         return bw
+
+    def _create_mutable_share(self, account, shnum, write_enabler):
+        self._mutable_shnums.add(shnum)
+        return self._locked_get_share(shnum)
 
 
 class NullShareBase(object):

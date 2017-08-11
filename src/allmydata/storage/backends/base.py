@@ -1,5 +1,7 @@
 
 from weakref import WeakValueDictionary
+from functools import partial
+from operator import setitem
 
 from twisted.application import service
 from twisted.internet import defer
@@ -160,11 +162,14 @@ class ShareSet(object):
                                     d4.addCallback(lambda ign, shnum=shnum:
                                                    self._create_mutable_share(account, shnum,
                                                                               write_enabler))
-                                    def _record_share(share, shnum=shnum):
-                                        sharemap[shnum] = share
-                                        account.add_share(self.storage_index, shnum, share.get_used_space(),
-                                                          SHARETYPE_MUTABLE)
-                                    d4.addCallback(_record_share)
+                                    # remember the newly created share object
+                                    d4.addCallback(partial(setitem, sharemap, shnum))
+
+                                def _record_share(ignored, shnum=shnum):
+                                    share = sharemap[shnum]
+                                    account.add_share(self.storage_index, shnum, share.get_used_space(),
+                                                      SHARETYPE_MUTABLE)
+                                d4.addCallback(_record_share)
                                 d4.addCallback(lambda ign, shnum=shnum, datav=datav, new_length=new_length:
                                                sharemap[shnum].writev(datav, new_length))
                                 def _update_lease(ign, shnum=shnum):

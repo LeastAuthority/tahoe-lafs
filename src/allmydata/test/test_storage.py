@@ -22,7 +22,9 @@ from allmydata import interfaces
 from allmydata.util.assertutil import precondition
 from allmydata.util.namespace import Namespace
 from allmydata.util import fileutil, hashutil, base32, time_format
+from allmydata.storage.account import Account
 from allmydata.storage.server import StorageServer
+from allmydata.storage.leasedb import LeaseDB
 from allmydata.storage.backends.base import ContainerItem, ContainerListing
 from allmydata.storage.backends.null.null_backend import NullBackend
 from allmydata.storage.backends.disk.disk_backend import DiskBackend
@@ -365,6 +367,67 @@ class Seek(unittest.TestCase, WorkdirMixin):
 
 
 class CloudCommon(unittest.TestCase, ShouldFailMixin, WorkdirMixin):
+    def test_testv_and_readv_and_writev_with_inconsistent_leasedb(self):
+        """
+        It is still to write to a mutable share for which no information is
+        present in the lease database.  In this case, the lease database is
+        populated with the new information about the share.
+        """
+        backend = NullBackend()
+        storage_index = b"abc"
+        share_num = 3
+
+        testv = []
+        datav = [(0, b"x" * 16)]
+        new_length = 16
+
+        write_enabler = object()
+        test_and_write_vectors = {
+            share_num: (testv, datav, new_length),
+        }
+
+        read_offset = 3
+        read_size = 12
+        read_vector = [(read_offset, read_size)]
+
+        expiration_time = object()
+
+        owner_num = 0 # ANONYMOUS XXX
+        pubkey_vs = None
+        server = object()
+        leasedb = LeaseDB(self.mktemp())
+
+        account = Account(owner_num, pubkey_vs, server, leasedb)
+
+        share_set = backend.get_shareset(storage_index)
+
+        def mutate_file():
+            return share_set.testv_and_readv_and_writev(
+                write_enabler,
+                test_and_write_vectors,
+                read_vector,
+                expiration_time,
+                account,
+            )
+
+        def corrupt_leasedb():
+            list(leasedb._cursor.execute("DELETE FROM `leases`"))
+            list(leasedb._cursor.execute("DELETE FROM `shares`"))
+
+        # Create it.
+        d = mutate_file()
+        # Simulate a loss of the leasedb.
+        d.addCallback(lambda ignored: corrupt_leasedb())
+        # Try to modify the file.
+        d.addCallback(lambda ignored: mutate_file())
+        def mutated(ignored):
+            # In addition to the mutation succeeding, a lease for the mutated
+            # share should have been created in the lease database.
+            [lease] = leasedb.get_leases(storage_index, owner_num)
+            self.assertEqual(share_num, lease.shnum)
+        d.addCallback(mutated)
+        return d
+
     def test_list_objects_truncated_badly(self):
         # If a container misbehaves by not producing listings with increasing keys,
         # that should cause an incident.
