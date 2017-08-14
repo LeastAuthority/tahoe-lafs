@@ -4,6 +4,7 @@ import cPickle as pickle
 
 from twisted.internet import defer, reactor
 from twisted.application import service
+from twisted.python.log import msg, err
 
 from allmydata.interfaces import IStorageBackend
 
@@ -266,6 +267,7 @@ class ShareCrawler(HookMixin, service.MultiService):
         self.current_sleep_time = None
         self.next_wake_time = None
 
+        msg("{} starting slice".format(self.__class__.__name__))
         d = self.start_current_prefix(start_slice)
         def _err(f):
             f.trap(TimeSliceExceeded)
@@ -273,7 +275,12 @@ class ShareCrawler(HookMixin, service.MultiService):
         def _ok(ign):
             return True
         d.addCallbacks(_ok, _err)
+        def _unexpected_err(reason):
+            err(reason, "slice failed")
+            return None
+        d.addErrback(_unexpected_err)
         def _done(finished_cycle):
+            msg("{} finished slice".format(self.__class__.__name__))
             self.save_state()
             if not self.running:
                 # someone might have used stopService() to shut us down
