@@ -102,7 +102,7 @@ class AccountingCrawler(ShareCrawler):
                 (used_space, sharetype) = stored_sharemap[shareid]
 
                 self._leasedb.add_new_share(si_a2b(si_s), shnum, used_space, sharetype)
-                self._leasedb.add_starter_lease(si_s, shnum)
+                self._leasedb.add_starter_lease(si_a2b(si_s), shnum)
 
             # Remove disappeared shares from the DB. Note that only shares in STATE_STABLE
             # should be considered "disappeared", since otherwise it would be possible for

@@ -13,6 +13,7 @@ from twisted.web.iweb import IBodyProducer, UNKNOWN_LENGTH
 from twisted.web.http_headers import Headers
 from twisted.protocols.ftp import FileConsumer
 from twisted.web.client import ResponseDone
+from twisted.python.log import msg
 
 from twisted.python.failure import Failure
 from foolscap.logging.log import OPERATIONAL, INFREQUENT, WEIRD
@@ -366,6 +367,11 @@ class Seek(unittest.TestCase, WorkdirMixin):
             f2.close()
 
 
+def corrupt_leasedb(leasedb):
+    list(leasedb._cursor.execute("DELETE FROM `leases`"))
+    list(leasedb._cursor.execute("DELETE FROM `shares`"))
+
+
 class CloudCommon(unittest.TestCase, ShouldFailMixin, WorkdirMixin):
     def test_testv_and_readv_and_writev_with_inconsistent_leasedb(self):
         """
@@ -410,14 +416,10 @@ class CloudCommon(unittest.TestCase, ShouldFailMixin, WorkdirMixin):
                 account,
             )
 
-        def corrupt_leasedb():
-            list(leasedb._cursor.execute("DELETE FROM `leases`"))
-            list(leasedb._cursor.execute("DELETE FROM `shares`"))
-
         # Create it.
         d = mutate_file()
         # Simulate a loss of the leasedb.
-        d.addCallback(lambda ignored: corrupt_leasedb())
+        d.addCallback(lambda ignored: corrupt_leasedb(leasedb))
         # Try to modify the file.
         d.addCallback(lambda ignored: mutate_file())
         def mutated(ignored):
@@ -4996,6 +4998,14 @@ class BucketCounterTest(WithDiskBackend, CrawlerTestMixin, ReallyEqualMixin, uni
         return d
 
 
+def accelerate_crawler(crawler):
+    """
+    Make the accounting
+    """
+    crawler.slow_start = 0
+    crawler.cpu_slice = 500
+
+
 class AccountingCrawlerTest(CrawlerTestMixin, WebRenderingMixin, ReallyEqualMixin):
     def make_shares(self, server):
         aa = server.get_accountant().get_anonymous_account()
@@ -5060,8 +5070,7 @@ class AccountingCrawlerTest(CrawlerTestMixin, WebRenderingMixin, ReallyEqualMixi
 
         # finish as fast as possible
         ac = server.get_accounting_crawler()
-        ac.slow_start = 0
-        ac.cpu_slice = 500
+        accelerate_crawler(ac)
 
         webstatus = StorageStatus(server)
 
@@ -5191,6 +5200,59 @@ class AccountingCrawlerTest(CrawlerTestMixin, WebRenderingMixin, ReallyEqualMixi
             return d2
         d.addCallback(_do_test)
         return d
+
+    def test_lost_leasedb(self):
+        """
+        If the leasedb is lost after some shares are created, the accounting
+        crawler re-populates a new leasedb with the lost information.
+        """
+        # Create the storage server detached from its parent so that the
+        # crawler won't start before we're ready.
+        server = self.create("test_basic", detached=True)
+
+        # Disable share expiration since it's not relevant to what's being
+        # tested here and it could only complicate things.
+        accountant = server.get_accountant()
+        accountant.set_expiration_policy(ExpirationPolicy(enabled=False))
+
+        # Finish crawling as quickly as possible to make the test complete as
+        # quickly as possible.
+        ac = server.get_accounting_crawler()
+        accelerate_crawler(ac)
+
+        leasedb = accountant._leasedb
+
+        # Put some initial state into the storage backend.
+        d = self.make_shares(server)
+        def shares_created(ignored):
+            msg("shares_created")
+            # Destroy the leasedb contents.  Now shares exist in the backend
+            # that are unknown to the leasedb.  The accounting crawler must be
+            # able to recover (some of) the missing information.
+            corrupt_leasedb(leasedb)
+
+            # Let the accounting crawler start up now.
+            server.setServiceParent(self.sparent)
+        d.addCallback(shares_created)
+        d.addCallback(lambda ignored: ac.set_hook('after_cycle'))
+        def cycle_finished(ignored):
+            msg("after_cycle")
+            # The leases will all be owned by the starter account since we've
+            # lost the information about who may have really held the lease.
+            owner = accountant.get_starter_account()
+            leases = {
+                si: len(owner.get_leases(si))
+                for si
+                in self.sis
+            }
+            self.assertEqual(
+                dict.fromkeys(self.sis, 1),
+                leases,
+                "Did not find one starter lease for each storage index",
+            )
+        d.addCallback(cycle_finished)
+        return d
+
 
     def _assert_sharecount(self, server, si, expected):
         d = defer.succeed(None)
