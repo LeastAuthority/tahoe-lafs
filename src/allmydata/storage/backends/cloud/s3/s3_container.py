@@ -1,5 +1,5 @@
 
-from zope.interface import implements
+from zope.interface import implementer
 
 try:
     from xml.etree.ElementTree import ParseError
@@ -19,8 +19,8 @@ def configure_s3_container(storedir, config):
     return S3Container(accesskeyid, secretkey, url, container_name)
 
 
+@implementer(IContainer)
 class S3Container(ContainerListMixin, CommonContainerMixin):
-    implements(IContainer)
     """
     I represent a real S3 container (bucket), accessed using the txaws library.
     """
