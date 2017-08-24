@@ -57,21 +57,6 @@ The system time of the storage server must be correct to within 15 minutes
 in order for S3 to accept the authentication provided with requests.
 
 
-DevPay
-------
-
-Optionally, Amazon `DevPay`_ may be used to delegate billing for a service
-based on Tahoe-LAFS and S3 to Amazon Payments.
-
-If DevPay is to be used, the user token and product token (in base64 form)
-must be stored in the files ``private/s3usertoken`` and ``private/s3producttoken``
-respectively. DevPay-related request headers will be sent only if these files
-are present when the server is started. It is currently assumed that only one
-user and product token pair is needed by a given storage server.
-
-.. _DevPay: http://docs.amazonwebservices.com/AmazonDevPay/latest/DevPayGettingStartedGuide/
-
-
 OpenStack
 =========
 

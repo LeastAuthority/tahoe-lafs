@@ -221,21 +221,9 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
         fileutil.write(os.path.join(basedir, "tahoe.cfg"), config)
 
         c = client.Client(basedir)
-        mock_S3Container.assert_called_with("keyid", "dummy", "http://s3.amazonaws.com", "test", None, None)
+        mock_S3Container.assert_called_with("keyid", "dummy", "http://s3.amazonaws.com", "test")
         server = c.getServiceNamed("storage")
         self.failUnless(isinstance(server.backend, CloudBackend), server.backend)
-
-        mock_S3Container.reset_mock()
-        self._write_secret(basedir, "s3producttoken", secret="{ProductToken}")
-        self.failUnlessRaises(InvalidValueError, client.Client, basedir)
-
-        mock_S3Container.reset_mock()
-        self._write_secret(basedir, "s3usertoken", secret="{UserToken}")
-        fileutil.write(os.path.join(basedir, "tahoe.cfg"), config + "s3.url = http://s3.example.com\n")
-
-        c = client.Client(basedir)
-        mock_S3Container.assert_called_with("keyid", "dummy", "http://s3.example.com", "test",
-                                            "{UserToken}", "{ProductToken}")
 
     def test_s3_readonly_bad(self):
         basedir = "client.Basic.test_s3_readonly_bad"

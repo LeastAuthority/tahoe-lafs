@@ -6,7 +6,6 @@ try:
 except ImportError:
     from elementtree.ElementTree import ParseError
 
-from allmydata.node import InvalidValueError
 from allmydata.storage.backends.cloud.cloud_common import IContainer, \
      CommonContainerMixin, ContainerListMixin
 
@@ -14,14 +13,10 @@ from allmydata.storage.backends.cloud.cloud_common import IContainer, \
 def configure_s3_container(storedir, config):
     accesskeyid = config.get_config("storage", "s3.access_key_id")
     secretkey = config.get_or_create_private_config("s3secret")
-    usertoken = config.get_optional_private_config("s3usertoken")
-    producttoken = config.get_optional_private_config("s3producttoken")
-    if producttoken and not usertoken:
-        raise InvalidValueError("If private/s3producttoken is present, private/s3usertoken must also be present.")
     url = config.get_config("storage", "s3.url", "http://s3.amazonaws.com")
     container_name = config.get_config("storage", "s3.bucket")
 
-    return S3Container(accesskeyid, secretkey, url, container_name, usertoken, producttoken)
+    return S3Container(accesskeyid, secretkey, url, container_name)
 
 
 class S3Container(ContainerListMixin, CommonContainerMixin):
@@ -30,7 +25,7 @@ class S3Container(ContainerListMixin, CommonContainerMixin):
     I represent a real S3 container (bucket), accessed using the txaws library.
     """
 
-    def __init__(self, access_key, secret_key, url, container_name, usertoken=None, producttoken=None, override_reactor=None):
+    def __init__(self, access_key, secret_key, url, container_name, override_reactor=None):
         CommonContainerMixin.__init__(self, container_name, override_reactor)
 
         # We only depend on txaws when this class is actually instantiated.
@@ -42,20 +37,13 @@ class S3Container(ContainerListMixin, CommonContainerMixin):
         creds = AWSCredentials(access_key=access_key, secret_key=secret_key)
         endpoint = AWSServiceEndpoint(uri=url)
 
-        query_factory = None
-        if usertoken is not None:
-            def make_query(*args, **kwargs):
-                amz_headers = kwargs.get("amz_headers", {})
-                if producttoken is not None:
-                    amz_headers["security-token"] = (usertoken, producttoken)
-                else:
-                    amz_headers["security-token"] = usertoken
-                kwargs["amz_headers"] = amz_headers
+        def make_query(*args, **kwargs):
+            query = Query(*args, **kwargs)
+            if hasattr(query.factory, 'noisy'):
+                query.factory.noisy = False
+            return query
 
-                return Query(*args, **kwargs)
-            query_factory = make_query
-
-        self.client = S3Client(creds=creds, endpoint=endpoint, query_factory=query_factory)
+        self.client = S3Client(creds=creds, endpoint=endpoint, query_factory=make_query)
         self.ServiceError = S3Error
 
     def _create(self):
