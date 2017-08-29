@@ -221,9 +221,35 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
         fileutil.write(os.path.join(basedir, "tahoe.cfg"), config)
 
         c = client.Client(basedir)
-        mock_S3Container.assert_called_with("keyid", "dummy", "http://s3.amazonaws.com", "test")
+        mock_S3Container.assert_called_with(
+            "keyid", "dummy", "http://s3.amazonaws.com", "test", "",
+        )
         server = c.getServiceNamed("storage")
         self.failUnless(isinstance(server.backend, CloudBackend), server.backend)
+
+    @mock.patch('allmydata.storage.backends.cloud.s3.s3_container.S3Container')
+    def test_s3_config_key_prefix(self, mock_S3Container):
+        """
+        A key prefix to be applied for all objects can be specified with the
+        ``s3.key_prefix`` item.
+        """
+        basedir = "client.Basic.test_s3_config_key_prefix"
+        os.mkdir(basedir)
+        self._write_secret(basedir, "s3secret")
+        config = (BASECONFIG +
+                  "[storage]\n" +
+                  "enabled = true\n" +
+                  "backend = cloud.s3\n" +
+                  "s3.access_key_id = keyid\n" +
+                  "s3.bucket = test\n" +
+                  "s3.key_prefix = foo\n"
+        )
+        fileutil.write(os.path.join(basedir, "tahoe.cfg"), config)
+
+        client.Client(basedir)
+        mock_S3Container.assert_called_with(
+            "keyid", "dummy", "http://s3.amazonaws.com", "test", "foo",
+        )
 
     def test_s3_readonly_bad(self):
         basedir = "client.Basic.test_s3_readonly_bad"

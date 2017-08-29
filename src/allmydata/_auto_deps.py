@@ -91,6 +91,7 @@ install_requires = [
     "pyOpenSSL >= 0.14",
 
     # needed for cloud backend
+    "attrs >= 17.2",
     "txAWS >= 0.4.0",
     "oauth2client == 1.1.0",
 ]

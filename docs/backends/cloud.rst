@@ -46,6 +46,12 @@ To enable storing shares on S3, add the following keys to the server's
     storage server will only modify and access objects in the configured S3
     bucket. Multiple storage servers cannot share the same bucket.
 
+``s3.prefix = (string, optional)``
+
+    This controls the keys associated with objects representing shares in the
+    S3 bucket.  If a value is given, normal keys generated for the shares will
+    be given this prefix.  If no value is given, the keys will be exactly
+
 ``s3.url = (URL string, optional)``
 
     This URL tells the storage server how to access the S3 service. It
