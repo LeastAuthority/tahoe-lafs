@@ -871,6 +871,7 @@ class Publish:
         verification_key = self._pubkey.serialize()
 
         for (shnum, writers) in self.writers.copy().iteritems():
+            self.log("finish_publishing visiting %d writers for shnum %r" % (len(writers), shnum))
             for writer in writers:
                 writer.put_verification_key(verification_key)
                 self.num_outstanding += 1
@@ -878,6 +879,7 @@ class Publish:
                     self.num_outstanding -= 1
                     return res
 
+                self.log("finish_publishing finishing writer %r" % (writer,))
                 d = writer.finish_publishing()
                 d.addBoth(_no_longer_outstanding)
                 d.addErrback(self._connection_problem, writer)
