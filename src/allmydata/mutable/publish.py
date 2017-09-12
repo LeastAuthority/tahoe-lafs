@@ -481,6 +481,11 @@ class Publish:
                                    self.total_shares,
                                    self.segment_size,
                                    self.datalength)
+
+            self.log(
+                "adding writer %r for shnum %r because server %r in goal" % (writer, shnum, server),
+            )
+
             self.writers.add(shnum, writer)
             writer.server = server
             known_shares = self._servermap.get_known_shares()
