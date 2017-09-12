@@ -752,6 +752,7 @@ class Publish:
         results, salt = encoded_and_salt
         shares, shareids = results
         self._status.set_status("Pushing segment")
+        self.log("_push_segment visiting %d shares" % (len(shares),))
         for i in xrange(len(shares)):
             sharedata = shares[i]
             shareid = shareids[i]
@@ -763,6 +764,7 @@ class Publish:
             self.blockhashes[shareid][segnum] = block_hash
             # find the writer for this share
             writers = self.writers[shareid]
+            self.log("_push_segment visiting %d writers for share %r" % (len(writers), shareid))
             for writer in writers:
                 writer.put_block(sharedata, segnum, salt)
 
