@@ -322,7 +322,7 @@ class SDMFSlotWriteProxy(object):
         self._share_pieces['salt'] = salt
 
         from allmydata.util import log
-        log.msg("%r put_block share_pieces %r" % (self, self._share_pieces))
+        log.msg("%r put_block share_pieces %r" % (self, self._share_pieces.keys()))
 
         # TODO: Figure out something intelligent to return.
         return defer.succeed(None)
