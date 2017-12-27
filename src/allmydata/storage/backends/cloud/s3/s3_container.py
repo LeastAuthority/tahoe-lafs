@@ -66,13 +66,21 @@ class _PrefixedKeys(object):
     def get_bucket(self, *args, **kwargs):
         """
         Retrieve the contents of this container which have the appropriate prefix.
+
         The consumer of this API also wants to be able to specify a prefix.
         If both prefixes are present, combine them in the correct order to
         produce the overall desired result (the prefix at this level takes
         precedence; the prefix supply by the consumer of this API provides
         another level of hierarchy inferior to the first).
+
+        The consumer of this API also wants to be able to specify a marker.
+        Combine the prefix with the marker to create the correct marker value
+        with respect to the prefixed region this object grants access to.
         """
         kwargs['prefix'] = self._key_prefix + kwargs.get('prefix', '')
+        if 'marker' in kwargs:
+            kwargs['marker'] = self._key_prefix + kwargs['marker']
+
         d = self._client.get_bucket(*args, **kwargs)
         def fix_prefixes(bucket):
             return attr.evolve(
@@ -80,6 +88,8 @@ class _PrefixedKeys(object):
                 # Strip off the part of the prefix we're transparently
                 # managing.
                 prefix=bucket.prefix[len(self._key_prefix):],
+                # And here.
+                marker=bucket.marker[len(self._key_prefix):],
                 contents=list(
                     attr.evolve(
                         item,
@@ -88,7 +98,7 @@ class _PrefixedKeys(object):
                     )
                     for item
                     in bucket.contents
-                )
+                ),
             )
         d.addCallback(fix_prefixes)
         return d

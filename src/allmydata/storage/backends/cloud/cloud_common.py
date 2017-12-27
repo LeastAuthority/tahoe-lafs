@@ -438,8 +438,8 @@ class ContainerListMixin:
                     marker = res.contents[-1].key
                     _assert('marker' not in kwargs or marker > kwargs['marker'],
                             "Not making progress in list_objects", kwargs=kwargs, marker=marker,
-                            first=list(content.key for content in contents[:3]),
-                            last=list(content.key for content in contents[-3:]),
+                            first=list(content.key for content in res.contents[:3]),
+                            last=list(content.key for content in res.contents[-3:]),
                     )
                     kwargs['marker'] = marker
                     return _list_some()

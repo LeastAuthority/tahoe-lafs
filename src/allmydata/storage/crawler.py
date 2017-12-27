@@ -78,7 +78,7 @@ class ShareCrawler(HookMixin, service.MultiService):
     time.time(), in order to make themselves deterministically testable.
     """
 
-    slow_start = 300 # don't start crawling for 5 minutes after startup
+    slow_start = 3 # don't start crawling for 5 minutes after startup
     # all three of these can be changed at any time
     allowed_cpu_proportion = .10 # use up to 10% of the CPU, on average
     cpu_slice = 1.0 # use up to 1.0 seconds before yielding
