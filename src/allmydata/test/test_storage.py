@@ -5,6 +5,7 @@ import thread
 
 import mock
 from twisted.trial import unittest
+from twisted.internet.task import Clock
 
 from twisted.internet import defer
 from twisted.internet.task import Clock
@@ -37,6 +38,7 @@ from allmydata.storage.backends.cloud.cloud_common import CloudError, CloudServi
 from allmydata.storage.backends.cloud.mutable import MutableCloudShare
 from allmydata.storage.backends.cloud import mock_cloud, cloud_common
 from allmydata.storage.backends.cloud.mock_cloud import MockContainer
+from allmydata.storage.backends.cloud.s3 import s3_container
 from allmydata.storage.backends.cloud.openstack import openstack_container
 from allmydata.storage.backends.cloud.googlestorage import googlestorage_container
 from allmydata.storage.backends.cloud.msazure import msazure_container
@@ -5738,3 +5740,56 @@ class WebStatusWithCloudBackendAndMockContainer(WithCloudBackendAndMockContainer
             self.failUnlessIn("lease-checker", data)
         d.addCallback(_check_json)
         return d
+
+
+class S3ContainerTest(unittest.TestCase):
+    """
+    Tests for AWS S3 cloud storage backend container.
+    """
+    def setUp(self):
+        self.clock = Clock()
+
+        self.bucket_name = b"abc123"
+        self.key_prefix = b"xyz789/"
+
+        from txaws.testing.service import FakeAWSServiceRegion
+        self.region = FakeAWSServiceRegion(b"id", b"key")
+        self.s3_client = self.region.get_s3_client()
+        self.successResultOf(self.s3_client.create_bucket(self.bucket_name))
+        self.successResultOf(self.s3_client.put_object(self.bucket_name, b"xxxxx"))
+
+        self.container = s3_container.S3Container.from_s3_client(
+            self.s3_client,
+            self.bucket_name,
+            self.key_prefix,
+            self.clock,
+        )
+
+    def test_list_no_objects(self):
+        """
+        ``list_some_objects`` returns a ``BucketListing`` with no contents if
+        there are no keys beneath the configured prefix of the configured
+        bucket.
+        """
+        self.assertEqual(
+            [],
+            self.successResultOf(self.container.list_some_objects()).contents,
+        )
+
+    def test_list_some_objects_with_too_many(self):
+        """
+        ``list_some_objects`` returns a ``BucketListing`` with some (not
+        necessarily all) keys beneath the configured prefix even if there are
+        more such keys than the maximum returned by any one call to S3.
+        """
+        # The default max items on S3 is 1000.
+        for i in range(1003):
+            self.successResultOf(
+                self.s3_client.put_object(
+                    self.bucket_name,
+                    u"{}{}".format(self.key_prefix, i),
+                )
+            )
+
+        listing = self.successResultOf(self.container.list_some_objects())
+        self.assertTrue(0 < len(listing.contents) <= 1003)

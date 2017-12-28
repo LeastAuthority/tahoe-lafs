@@ -83,13 +83,16 @@ class _PrefixedKeys(object):
 
         d = self._client.get_bucket(*args, **kwargs)
         def fix_prefixes(bucket):
+            marker = None
+            if bucket.marker is not None:
+                marker = bucket.marker[len(self._key_prefix):]
             return attr.evolve(
                 bucket,
                 # Strip off the part of the prefix we're transparently
                 # managing.
                 prefix=bucket.prefix[len(self._key_prefix):],
                 # And here.
-                marker=bucket.marker[len(self._key_prefix):],
+                marker=marker,
                 contents=list(
                     attr.evolve(
                         item,
@@ -139,22 +142,32 @@ class S3Container(ContainerListMixin, CommonContainerMixin):
     """
 
     def __init__(self, access_key, secret_key, url, container_name, key_prefix, override_reactor=None):
-        CommonContainerMixin.__init__(self, container_name, override_reactor)
-
         # We only depend on txaws when this class is actually instantiated.
         from txaws.credentials import AWSCredentials
         from txaws.service import AWSServiceEndpoint
         from txaws.s3.client import S3Client
-        from txaws.s3.exception import S3Error
 
         creds = AWSCredentials(access_key=access_key, secret_key=secret_key)
         endpoint = AWSServiceEndpoint(uri=url)
-
-        self.client = _PrefixedKeys(
+        self._init(
             S3Client(creds=creds, endpoint=endpoint),
+            container_name,
             key_prefix,
+            override_reactor,
         )
+
+    def _init(self, s3_client, container_name, key_prefix, override_reactor):
+        CommonContainerMixin.__init__(self, container_name, override_reactor)
+        self.client = _PrefixedKeys(s3_client, key_prefix)
+
+        from txaws.s3.exception import S3Error
         self.ServiceError = S3Error
+
+    @classmethod
+    def from_s3_client(cls, client, container_name, key_prefix, override_reactor=None):
+        self = cls("x", "x", "", "", "")
+        self._init(client, container_name, key_prefix, override_reactor)
+        return self
 
     def _create(self):
         return self.client.create(self._container_name)
