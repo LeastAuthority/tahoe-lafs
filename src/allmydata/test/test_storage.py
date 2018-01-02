@@ -5776,20 +5776,44 @@ class S3ContainerTest(unittest.TestCase):
             self.successResultOf(self.container.list_some_objects()).contents,
         )
 
+    def _make_many_objects(self, s3_client, bucket_name, key_prefix):
+        # The default max items on S3 is 1000.
+        n = 1003
+        for i in range(n):
+            self.successResultOf(
+                s3_client.put_object(
+                    bucket_name,
+                    u"{}{}".format(key_prefix, i),
+                )
+            )
+        return n
+
+
     def test_list_some_objects_with_too_many(self):
         """
         ``list_some_objects`` returns a ``BucketListing`` with some (not
         necessarily all) keys beneath the configured prefix even if there are
         more such keys than the maximum returned by any one call to S3.
         """
-        # The default max items on S3 is 1000.
-        for i in range(1003):
-            self.successResultOf(
-                self.s3_client.put_object(
-                    self.bucket_name,
-                    u"{}{}".format(self.key_prefix, i),
-                )
-            )
-
+        how_many = self._make_many_objects(
+            self.s3_client,
+            self.bucket_name,
+            self.key_prefix,
+        )
         listing = self.successResultOf(self.container.list_some_objects())
-        self.assertTrue(0 < len(listing.contents) <= 1003)
+        self.assertTrue(0 < len(listing.contents) < how_many)
+
+
+    def test_list_objects_with_too_many(self):
+        """
+        ``list_objects`` returns a ``BucketListing`` with all keys beneath the
+        configured prefix even if there are more such keys than the maximum
+        returned by any one call to S3.
+        """
+        how_many = self._make_many_objects(
+            self.s3_client,
+            self.bucket_name,
+            self.key_prefix,
+        )
+        listing = self.successResultOf(self.container.list_objects())
+        self.assertEqual(how_many, len(listing.contents))
