@@ -18,6 +18,9 @@ from testtools.matchers import (
     AfterPreprocessing,
 )
 
+from zope.interface import (
+    implementer,
+)
 from zope.interface.verify import (
     verifyObject,
 )
@@ -63,6 +66,7 @@ from allmydata.storage_client import (
 )
 from allmydata.interfaces import (
     IConnectionStatus,
+    IStorageServer,
 )
 
 SOME_FURL = b"pb://abcde@nowhere/fake"
@@ -387,6 +391,9 @@ class FoolscapStorageServers(unittest.TestCase):
         """
         Instances of ``_FoolscapStorage`` provide ``IFoolscapStorageServer``.
         """
+        @implementer(IStorageServer)
+        class NotStorageServer(object):
+            pass
         self.assertTrue(
             verifyObject(
                 IFoolscapStorageServer,
@@ -394,7 +401,7 @@ class FoolscapStorageServers(unittest.TestCase):
                     u"server-id",
                     SOME_FURL,
                     {u"permutation-seed-base32": base32.b2a(b"permutationseed")},
-                    object(),
+                    NotStorageServer(),
                 ),
             ),
         )
