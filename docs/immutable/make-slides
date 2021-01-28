@@ -1,0 +1,56 @@
+#!/usr/bin/env sh
+
+cat >chk-walkthrough-slides.rst <<EOF
+:title: Tahoe-LAFS CHK (Immutables) Encryption & Encoding
+:data-transition-duration: 150
+:css: extra.css
+
+CHK Encryption & Encoding
+=========================
+
+How Tahoe Handles Immutable Files
+---------------------------------
+
+.. note::
+
+   * Hello and thanks for joining
+   * Today I'm talking about Tahoe
+   * Tahoe is a distributed, end-to-end-encrypted, high-availability storage system
+   * LeastAuthority operates S4 based on Tahoe
+   * PrivateStorage is also based on Tahoe
+   * Tahoe lets you store your data on someone else's computer (eg in the cloud)
+   * But it doesn't let anyone in the cloud read it or tamper with it
+   * And it doesn't let the cloud prevent you from reading it (mostly)
+   * Today I'm specifically talking about Tahoe's support for *immutable* files or "CHK capabilities"
+
+     * these files are write-once
+     * you upload them once and they can never be changed
+
+  * More specifically, I'm going to go through the encryption and encoding of these files
+
+----
+
+EOF
+
+for f in docs/immutable/{hash-functions,tagged-hash-functions,sha256d-hash-function,merkle-trees,choose-parameter-segment-size,choose-parameter-fec,derive-encryption-key,encrypt,ciphertext-hash,segment,ciphertext-hash-tree-1,ciphertext-hash-tree-2,forward-erasure-encode,block-hash-trees,share-hash-tree,uri-extension,shares,capability}.rst; do
+    cat $f
+    echo
+    echo '----'
+    echo
+done >> chk-walkthrough-slides.rst
+
+cat >>chk-walkthrough-slides.rst <<EOF
+
+The End
+=======
+
+* Specification-in-progress: https://gitlab.com/exarkun/chk.hs/-/blob/master/docs/specification.rst
+* Haskell Implementation: https://gitlab.com/exarkun/chk.hs
+* Python Implementation: https://github.com/tahoe-lafs/tahoe-lafs/tree/master/src/allmydata/immutable
+
+Questions?
+
+
+EOF
+
+hovercraft chk-walkthrough-slides.rst chk-walkthrough-output/
