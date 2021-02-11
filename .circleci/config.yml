@@ -29,10 +29,10 @@ workflows:
       - "debian-9": &DOCKERHUB_CONTEXT
           context: "dockerhub-auth"
 
-  #     - "debian-10":
-  #         <<: *DOCKERHUB_CONTEXT
-  #         requires:
-  #           - "debian-9"
+      - "debian-10":
+          <<: *DOCKERHUB_CONTEXT
+          requires:
+            - "debian-9"
 
   #     - "ubuntu-20-04":
   #         <<: *DOCKERHUB_CONTEXT
