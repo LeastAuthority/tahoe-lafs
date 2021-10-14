@@ -22,7 +22,7 @@ def run_command(args, cwd=None):
     use_shell = sys.platform == "win32"
     try:
         p = subprocess.Popen(args, stdout=subprocess.PIPE, cwd=cwd, shell=use_shell)
-    except EnvironmentError as e:  # if this gives a SyntaxError, note that Tahoe-LAFS requires Python 2.7+
+    except EnvironmentError as e:
         print("Warning: unable to run %r." % (" ".join(args),))
         print(e)
         return None
