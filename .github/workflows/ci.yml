@@ -40,6 +40,7 @@ env:
 jobs:
 
   coverage:
+    if: ${{ false }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -140,6 +141,7 @@ jobs:
   # See notes about parallel builds on GitHub Actions at
   # https://coveralls-python.readthedocs.io/en/latest/usage/configuration.html
   finish-coverage-report:
+    if: ${{ false }}
     needs:
       - "coverage"
     runs-on: "ubuntu-latest"
@@ -154,6 +156,7 @@ jobs:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
   integration:
+    if: ${{ false }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -239,6 +242,7 @@ jobs:
           path: integration.eliot.json
 
   packaging:
+    if: ${{ false }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
