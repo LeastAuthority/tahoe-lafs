@@ -5,6 +5,7 @@ on:
     branches:
       - "master"
   pull_request:
+  workflow_dispatch:
 
 # At the start of each workflow run, GitHub creates a unique
 # GITHUB_TOKEN secret to use in the workflow. It is a good idea for
@@ -240,6 +241,25 @@ jobs:
         with:
           name: integration.eliot.json
           path: integration.eliot.json
+
+  systemtest:
+    run-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - debian:11
+          - ubuntu:20.04
+          - ubuntu:22.04
+    container:
+      image: ${{ matrix.image }}
+      env:
+        python-version: 3.9
+      options: --cpus 1
+    steps:
+      - name: Test image
+        run: |
+          echo ${{ matrix.image }}-${{ env.python-version }}
 
   packaging:
     if: ${{ false }}
