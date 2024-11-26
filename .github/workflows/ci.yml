@@ -13,12 +13,23 @@ permissions:
 jobs:
   systemtest:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - "debian:11"
+          - "ubuntu:20.04"
+          - "ubuntu:22.04"
+          - "fedora:35"
+          - "oraclelinux:8"
+        python-version:
+          - 3.9
     container:
-      image: debian:11
+      image: ${{ matrix.image }}
       options: --cpus 1
       env:
-        python-version: 3.9
+        python-version: ${{ matrix.python-version }}
     steps:
       - name: Test image
         run: |
-          echo "debian:11-${{ env.python-version }}"
+          echo "${{ matrix.image }}-${{ env.python-version }}"
