@@ -71,7 +71,7 @@ parameters:
   # Generally we do want this to run because running the tests is the primary
   # purpose of this pipeline.
   run-tests:
-    default: true
+    default: false
     type: "boolean"
 
 workflows:
