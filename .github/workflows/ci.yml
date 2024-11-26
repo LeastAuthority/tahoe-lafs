@@ -5,8 +5,6 @@ on:
     branches:
       - master
   pull_request:
-    branches:
-      - wrestle-circle-ci
   workflow_dispatch:
 
 permissions:
@@ -15,8 +13,11 @@ permissions:
 jobs:
   systemtest:
     runs-on: ubuntu-22.04
-    env:
-      python-version: 3.9
+    container:
+      image: debian:11
+      options: --cpus 1
+      env:
+        python-version: 3.9
     steps:
       - name: Test image
         run: |
