@@ -242,28 +242,97 @@ jobs:
           name: integration.eliot.json
           path: integration.eliot.json
 
+  build-images:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - distro: "debian"
+            tag: "11"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "20.04"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "22.04"
+            python-version: "3.10"
+          - distro: "fedora"
+            tag: "35"
+            python-version: "3.10"
+          - distro: "oraclelinux"
+            tag: "8"
+            python-version: "3.9"
+    env:
+      TAG: ${{ matrix.image.tag }}
+      PYTHON_VERSION: ${{ matrix.image.python-version }}
+      DISTRO: ${{ matrix.image.distro }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Docker
+        id: verify_docker
+        run: |
+          docker run --rm hello-world:latest > /dev/null
+          docker rmi hello-world:latest > /dev/null
+          docker version
+
+      - name: Cache docker images
+        uses: ScribeMD/docker-cache@0.3.3
+        with:
+          key: |
+            docker-${{ matrix.image.distro }}_${{ matrix.image.tag }}-py${{ matrix.image.python-version }}-${{ hashFiles(
+              format('docker/{0}/Dockerfile', matrix.image.distro)
+            ) }}
+
+      - name: Build Docker image
+        id: build_image
+        run: |
+          docker images --filter "reference=*tahoelafsci/${DISTRO}"
+          docker images --filter "reference=*tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION}" --quiet | grep -v "^$" \
+          || docker \
+                build \
+                --build-arg TAG=${TAG} \
+                --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
+                -t tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION} \
+                -f ./docker/${DISTRO}/Dockerfile \
+                . \
+          && docker images --filter "reference=*tahoelafsci/${DISTRO}"
+
   systemtest:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         image:
-          - "debian:11"
-          - "ubuntu:20.04"
-          - "ubuntu:22.04"
-          - "fedora:35"
-          - "oraclelinux:8"
-        python-version:
-          - 3.9
+          - distro: "debian"
+            tag: "11"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "20.04"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "22.04"
+            python-version: "3.10"
+          - distro: "fedora"
+            tag: "35"
+            python-version: "3.10"
+          - distro: "oraclelinux"
+            tag: "8"
+            python-version: "3.9"
+    env:
+      TAG: ${{ matrix.image.tag }}
+      PYTHON_VERSION: ${{ matrix.image.python-version }}
+      DISTRO: ${{ matrix.image.distro }}
     container:
-      image: ${{ matrix.image }}
+      image: ${{ matrix.image.distro }}
       options: --cpus 1
-      env:
-        python-version: ${{ matrix.python-version }}
     steps:
       - name: Test image
         run: |
-          echo "${{ matrix.image }}-${{ env.python-version }}"
+          echo "${DISTRO}:${TAG}-py${PYTHON_VERSION}"
 
   packaging:
     if: ${{ false }}
