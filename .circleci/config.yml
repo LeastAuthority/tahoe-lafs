@@ -632,7 +632,7 @@ jobs:
                 --build-arg TAG=${TAG} \
                 --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
                 -t tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION} \
-                -f ~/project/.circleci/Dockerfile.${DISTRO} \
+                -f ~/project/docker/${DISTRO}/Dockerfile \
                 ~/project/
       - run:
           name: "Push image"
