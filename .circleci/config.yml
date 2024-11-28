@@ -75,6 +75,11 @@ parameters:
     type: "boolean"
 
 workflows:
+  status:
+    jobs:
+      - "connectivity":
+          {}
+
   ci:
     when: "<< pipeline.parameters.run-tests >>"
     jobs:
@@ -129,6 +134,27 @@ workflows:
     when: "<< pipeline.parameters.build-images >>"
 
 jobs:
+  connectivity:
+    docker:
+      - image: "tahoelafsci/debian:11-py3.9"
+    # shell: /bin/bash -exo pipefail
+    # environment:
+    #   CIRCLE_REPOSITORY_URL: "https://github.com/LeastAuthority/tahoe-lafs.git"
+
+    steps:
+      # - run:
+      #     name: "Print environment variables"
+      #     command: |
+      #       env | sort
+      - checkout:
+          {}
+      - run:
+          name: "SSH key used to checkout"
+          command: |
+            ssh-add -L
+            cat ~/.ssh/id_rsa.pub
+            ssh-keygen -lf ~/.ssh/id_rsa.pub
+
   finish-coverage-report:
     docker:
       - <<: *DOCKERHUB_AUTH
