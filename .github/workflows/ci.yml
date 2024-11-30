@@ -236,6 +236,233 @@ jobs:
           name: "integration.eliot-${{ matrix.os }}-python-${{ matrix.python-version }}.json"
           path: integration.eliot.json
 
+  unitests:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - distro: "debian"
+            tag: "11"
+            python-version: "3.9"
+            tox_environment: "py39"
+          - distro: "ubuntu"
+            tag: "20.04"
+            python-version: "3.9"
+            tox_environment: "py39"
+          - distro: "ubuntu"
+            tag: "22.04"
+            python-version: "3.10"
+            tox_environment: "py310"
+          - distro: "fedora"
+            tag: "35"
+            python-version: "3.10"
+            tox_environment: "py310"
+          - distro: "oraclelinux"
+            tag: "8"
+            python-version: "3.9"
+            tox_environment: "py39"
+        allowed_failure:
+          - "no"
+        locale:
+          - "en_US.UTF-8"
+        include:
+          - image:
+              distro: "debian"
+              tag: "11"
+              python-version: "3.9"
+              tox_environment: "py39"
+            locale: "C"
+          - image:
+              distro: "debian"
+              tag: "11"
+              python-version: "3.9"
+              tox_environment: "py39"
+            locale: "en_US.ISO-8859-1"
+
+    env:
+      CONTEXT: .circleci   # TODO: move all docker related files in a specific top-folder
+      PREFIX: tahoelafsci/ # Only to match the current name in CircleCI, could be anything
+      TAG: ${{ matrix.image.tag }}
+      PYTHON_VERSION: ${{ matrix.image.python-version }}
+      DISTRO: ${{ matrix.image.distro }}
+      LANG: ${{ matrix.locale }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache docker images
+        # To save us some time if the docker context has not changed
+        # TODO: Maybe filter the context to keep only what's needed
+        # to build the images (e.g.: not the whole src)
+        uses: ScribeMD/docker-cache@0.3.3
+        with:
+          key: |
+            docker-${{ matrix.image.distro }}_${{ matrix.image.tag }}-py${{ matrix.image.python-version }}-${{ hashFiles(
+              format('{0}/Dockerfile.{1}', env.CONTEXT, matrix.image.distro)
+            ) }}
+
+      - name: Build Docker image
+        # Only if not previously restored from the cache
+        run: |
+          docker images --filter "reference=${PREFIX}${DISTRO}"
+          docker images --filter "reference=${PREFIX}${DISTRO}:${TAG}-py${PYTHON_VERSION}" \
+            --quiet | grep -v "^$" \
+          || docker \
+            build \
+              --build-arg TAG=${TAG} \
+              --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
+              -t ${PREFIX}${DISTRO}:${TAG}-py${PYTHON_VERSION} \
+              -f ${CONTEXT}/Dockerfile.${DISTRO} \
+              . \
+          && docker images --filter "reference=${PREFIX}${DISTRO}"
+
+      - name: Prepare environment variables
+        # Write some variables in a file (ignored by git, similar to CircleCI)
+        # So we can pass them the runner AND the container in the next steps
+        # FIXME: There must be a better way to do this
+        id: prep
+        env:
+          # The following variables will be injected in the runner enviroment
+          # In general, the test suite is not allowed to fail while the job
+          # succeeds.  But you can set this to "yes" if you want it to be
+          # otherwise.
+          ALLOWED_FAILURE: ${{ matrix.allowed_failure }}
+          # Select a tox environment to run for this job.
+          TAHOE_LAFS_TOX_ENVIRONMENT: ${{ matrix.image.tox_environment }}
+          # Additional arguments to pass to tox.
+          TAHOE_LAFS_TOX_ARGS: "-- allmydata.test.test_system"
+          # The path in which test artifacts will be placed.
+          ARTIFACTS_OUTPUT_PATH: /tmp/artifacts
+          # Convince all of our pip invocations to look at the cached wheelhouse
+          # we maintain.
+          WHEELHOUSE_PATH: /tmp/wheelhouse
+          PIP_FIND_LINKS: file:///tmp/wheelhouse
+        run: |
+          { cat <<EOF
+          # The following variables will be injected in the container enviroment
+          # Convince all of our pip invocations to look at the cached wheelhouse
+          # we maintain.
+          WHEELHOUSE_PATH=${WHEELHOUSE_PATH}
+          PIP_FIND_LINKS=file://${WHEELHOUSE_PATH}
+          # Select a tox environment to run for this job.
+          # FIXME: this variable should not be duplicated here (already passed as an arg.)!
+          TAHOE_LAFS_TOX_ENVIRONMENT=${TAHOE_LAFS_TOX_ENVIRONMENT}
+          # Additional arguments to pass to tox.
+          # FIXME: this variable should not be duplicated here (already passed as an arg.)!
+          TAHOE_LAFS_TOX_ARGS=${TAHOE_LAFS_TOX_ARGS}
+          # Tell Hypothesis which configuration we want it to use.
+          TAHOE_LAFS_HYPOTHESIS_PROFILE=ci
+          # Tell the C runtime things about character encoding (mainly to do with
+          # filenames and argv).
+          # FIXME: this variable should not be duplicated here (already passed as an arg.)!
+          LANG=${LANG}
+          # The path in which test artifacts will be placed.
+          # FIXME: this variable should not be duplicated here (already passed as an arg.)!
+          ARTIFACTS_OUTPUT_PATH=/tmp/artifacts
+          # Upload the coverage report.
+          UPLOAD_COVERAGE=""
+          EOF
+          } | grep -v -E '^(|\s*#.*)$' \
+            | tee -a $GITHUB_ENV \
+            > secret-env-plain
+          # First, inject the variables in the runner environment,
+          # Then in a file used later to start the container
+
+      - name: Start the container
+        # So we can execute the next steps inside
+        id: start_container
+        run: |
+          CID=$(docker run \
+            --rm --tty --detach \
+            -v .:/tmp/project \
+            -v "${ARTIFACTS_OUTPUT_PATH}":"${ARTIFACTS_OUTPUT_PATH}" \
+            -w /tmp/project \
+            --env-file secret-env-plain \
+            "${PREFIX}${DISTRO}:${TAG}-py${PYTHON_VERSION}" \
+          )
+          # Verify we have some python3 interpreter installed
+          docker exec $CID python3 -VV
+          # Print the environment within the container
+          docker exec $CID env
+          # Save the container id as output for the next steps 
+          echo "cid=$CID" >> $GITHUB_OUTPUT
+
+      - name: Setup virtualenv
+        # Inside the container started above
+        run: |
+          docker exec \
+            ${{ steps.start_container.outputs.cid }} \
+              /tmp/project/.circleci/setup-virtualenv.sh \
+                "/tmp/venv" \
+                "/tmp/project" \
+                "${WHEELHOUSE_PATH}" \
+                "${TAHOE_LAFS_TOX_ENVIRONMENT}" \
+                "${TAHOE_LAFS_TOX_ARGS}"
+
+      - name: Run test suite
+        # Also inside the container
+        id: test_suite
+        run: |
+          docker exec \
+            ${{ steps.start_container.outputs.cid }} \
+              /tmp/project/.circleci/run-tests.sh \
+                "/tmp/venv" \
+                "/tmp/project" \
+                "${ALLOWED_FAILURE}" \
+                "${ARTIFACTS_OUTPUT_PATH}" \
+                "${TAHOE_LAFS_TOX_ENVIRONMENT}" \
+                "${TAHOE_LAFS_TOX_ARGS}"
+        # trial output gets directed straight to a log.
+        # avoid the CI timeout while the test suite runs.
+        timeout-minutes: 20
+
+      - name: Stop the container
+        # No longer needed for the next steps
+        if: ${{ always() && steps.start_container.outcome == 'success' }}
+        run: |
+          docker stop --time 3 \
+            ${{ steps.start_container.outputs.cid }}
+
+      - name: Store test results
+        # So we can download them if needed
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results_${{ env.DISTRO }}-${{ env.TAG }}_py${{ env.PYTHON_VERSION }}-${{ env.LANG }}
+          path: ${{ env.ARTIFACTS_OUTPUT_PATH }}/**
+
+      - name: Publish test reports
+        # To be visible from the build summary
+        id: test_reports
+        uses: mikepenz/action-junit-report@v5
+        if: ${{ !cancelled() }}
+        with:
+          report_paths: ${{ env.ARTIFACTS_OUTPUT_PATH }}/junit/unittests/results.xml
+          annotate_only: true
+          detailed_summary: true
+          require_passed_tests: true
+          fail_on_failure: true
+          token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Conclusion
+        # Fail for the test results (parsed in the last step) if we care about them
+        if: ${{ !cancelled() }}
+        run: |
+          if [ "${{ steps.test_reports.outcome }}" = "failure" \
+            -a "${{ matrix.image.allowed_failure }}" = "yes" ]; then
+            # If we have reached the test reporting, and some test have failed,
+            # succeed this build only if we allow the tests to fail 
+            exit 0
+          else
+            # Exit with the expected status w/o further expection
+            if [ "${{ job.status }}" = "success" ]; then
+              exit 0
+            else
+              exit 1
+            fi
+          fi
+
   packaging:
     runs-on: ${{ matrix.os }}
     strategy:
