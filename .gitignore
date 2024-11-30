@@ -50,7 +50,7 @@ zope.interface-*.egg
 /misc/python3/results.xml
 /misc/python3/results.subunit2
 
-# This is the plaintext of the private environment needed for some CircleCI
+# This is the plaintext of the private environment needed for some CI
 # operations.  It's never supposed to be checked in.
 secret-env-plain
 
