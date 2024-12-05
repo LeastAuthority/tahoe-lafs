@@ -92,16 +92,6 @@ workflows:
       - "oraclelinux-8":
           {}
 
-      - "nixos":
-          name: "<<matrix.pythonVersion>>"
-          nixpkgs: "nixpkgs-unstable"
-          matrix:
-            parameters:
-              pythonVersion:
-                - "python39"
-                - "python310"
-                - "python311"
-
       # Eventually, test against PyPy 3.8
       #- "pypy27-buster":
       #    {}
@@ -574,40 +564,6 @@ jobs:
         image: "tahoelafsci/fedora:35-py3"
         user: "nobody"
 
-  nixos:
-    parameters:
-      nixpkgs:
-        description: >-
-          Reference the name of a flake-managed nixpkgs input (see `nix flake
-          metadata` and flake.nix)
-        type: "string"
-      pythonVersion:
-        description: >-
-          Reference the name of a Python package in nixpkgs to use.
-        type: "string"
-
-    executor: "nix"
-
-    steps:
-      - "nix-build":
-          nixpkgs: "<<parameters.nixpkgs>>"
-          pythonVersion: "<<parameters.pythonVersion>>"
-          buildSteps:
-            - "run":
-                name: "Unit Test"
-                command: |
-                  source .circleci/lib.sh
-
-                  # Translate the nixpkgs selection into a flake reference we
-                  # can use to override the default nixpkgs input.
-                  NIXPKGS=$(nixpkgs_flake_reference <<parameters.nixpkgs>>)
-
-                  cache_if_able nix run \
-                    --override-input nixpkgs "$NIXPKGS" \
-                    .#<<parameters.pythonVersion>>-unittest -- \
-                    --jobs $UNITTEST_CORES \
-                    allmydata
-
   typechecks:
     docker:
       - <<: *DOCKERHUB_AUTH
@@ -737,74 +693,3 @@ executors:
       shell: "powershell.exe -ExecutionPolicy Bypass"
     resource_class: "windows.large"
 
-  nix:
-    docker:
-      # Run in a highly Nix-capable environment.
-      - <<: *DOCKERHUB_AUTH
-        image: "nixos/nix:2.16.1"
-    environment:
-      # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us
-      # to push to CACHIX_NAME.  CACHIX_NAME tells cachix which cache to push
-      # to.
-      CACHIX_NAME: "tahoe-lafs-opensource"
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command flakes"
-
-commands:
-  nix-build:
-    parameters:
-      nixpkgs:
-        description: >-
-          Reference the name of a flake-managed nixpkgs input (see `nix flake
-          metadata` and flake.nix)
-        type: "string"
-      pythonVersion:
-        description: >-
-          Reference the name of a Python package in nixpkgs to use.
-        type: "string"
-      buildSteps:
-        description: >-
-          The build steps to execute after setting up the build environment.
-        type: "steps"
-
-    steps:
-      - "run":
-          # Get cachix for Nix-friendly caching.
-          name: "Install Basic Dependencies"
-          command: |
-            # Get some build environment dependencies and let them float on a
-            # certain release branch.  These aren't involved in the actual
-            # package build (only in CI environment setup) so the fact that
-            # they float shouldn't hurt reproducibility.
-            NIXPKGS="nixpkgs/nixos-23.05"
-            nix profile install $NIXPKGS#cachix $NIXPKGS#bash $NIXPKGS#jp
-
-            # Activate our cachix cache for "binary substitution".  This sets
-            # up configuration tht lets Nix download something from the cache
-            # instead of building it locally, if possible.
-            cachix use "${CACHIX_NAME}"
-
-      - "checkout"
-
-      - "run":
-          # The Nix package doesn't know how to do this part, unfortunately.
-          name: "Generate version"
-          command: |
-            nix-shell \
-              -p 'python3.withPackages (ps: [ ps.setuptools ])' \
-              --run 'python setup.py update_version'
-
-      - "run":
-          name: "Build Package"
-          command: |
-            source .circleci/lib.sh
-            NIXPKGS=$(nixpkgs_flake_reference <<parameters.nixpkgs>>)
-            cache_if_able nix build \
-              --verbose \
-              --print-build-logs \
-              --cores "$DEPENDENCY_CORES" \
-              --override-input nixpkgs "$NIXPKGS" \
-              .#<<parameters.pythonVersion>>-tahoe-lafs
-
-      - steps: "<<parameters.buildSteps>>"
