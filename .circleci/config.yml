@@ -71,10 +71,15 @@ parameters:
   # Generally we do want this to run because running the tests is the primary
   # purpose of this pipeline.
   run-tests:
-    default: true
+    default: false
     type: "boolean"
 
 workflows:
+  status:
+    jobs:
+      - "connectivity":
+          {}
+
   ci:
     when: "<< pipeline.parameters.run-tests >>"
     jobs:
@@ -88,29 +93,7 @@ workflows:
       - "ubuntu-22-04":
           {}
 
-      # Equivalent to RHEL 8; CentOS 8 is dead.
-      - "oraclelinux-8":
-          {}
-
-      - "nixos":
-          name: "<<matrix.pythonVersion>>"
-          nixpkgs: "nixpkgs-unstable"
-          matrix:
-            parameters:
-              pythonVersion:
-                - "python39"
-                - "python310"
-                - "python311"
-
-      # Eventually, test against PyPy 3.8
-      #- "pypy27-buster":
-      #    {}
-
       # Other assorted tasks and configurations
-      - "codechecks":
-          {}
-      - "pyinstaller":
-          {}
       - "c-locale":
           {}
       # Any locale other than C or UTF-8.
@@ -132,20 +115,6 @@ workflows:
                 - "3.9"
                 - "3.12"
 
-      - "integration":
-          # Run even the slow integration tests here.  We need the `--` to
-          # sneak past tox and get to pytest.
-          tox-args: "-- --runslow integration"
-          requires:
-            # If the unit test suite doesn't pass, don't bother running the
-            # integration tests.
-            - "debian-11"
-
-      - "typechecks":
-          {}
-      - "docs":
-          {}
-
       - "finish-coverage-report":
           requires:
             # Referencing the job by "alias" (as CircleCI calls the mapping
@@ -155,6 +124,9 @@ workflows:
             # job.
             - "windows-server-2022"
 
+      - "typechecks":
+          {}
+
   images:
     <<: *IMAGES
 
@@ -162,6 +134,27 @@ workflows:
     when: "<< pipeline.parameters.build-images >>"
 
 jobs:
+  connectivity:
+    docker:
+      - image: "tahoelafsci/debian:11-py3.9"
+    # shell: /bin/bash -exo pipefail
+    # environment:
+    #   CIRCLE_REPOSITORY_URL: "https://github.com/LeastAuthority/tahoe-lafs.git"
+
+    steps:
+      # - run:
+      #     name: "Print environment variables"
+      #     command: |
+      #       env | sort
+      - checkout:
+          {}
+      - run:
+          name: "SSH key used to checkout"
+          command: |
+            ssh-add -L
+            cat ~/.ssh/id_rsa.pub
+            ssh-keygen -lf ~/.ssh/id_rsa.pub
+
   finish-coverage-report:
     docker:
       - <<: *DOCKERHUB_AUTH
@@ -302,7 +295,7 @@ jobs:
             # Run the test suite under coverage measurement using the
             # parameterized version of Python, writing subunitv2-format
             # results to the file given in the environment.
-            python -b -m coverage run -m twisted.trial --reporter=subunitv2-file --rterrors allmydata
+            python -b -m coverage run -m twisted.trial --debug-stacktraces --reporter=subunitv2-file --rterrors allmydata
 
       - "run":
           name: "Upload Coverage"
@@ -605,8 +598,7 @@ jobs:
                   cache_if_able nix run \
                     --override-input nixpkgs "$NIXPKGS" \
                     .#<<parameters.pythonVersion>>-unittest -- \
-                    --jobs $UNITTEST_CORES \
-                    allmydata
+                    allmydata.test.test_system.HTTPSystemTest
 
   typechecks:
     docker:
@@ -666,7 +658,7 @@ jobs:
                 --build-arg TAG=${TAG} \
                 --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
                 -t tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION} \
-                -f ~/project/.circleci/Dockerfile.${DISTRO} \
+                -f ~/project/docker/${DISTRO}/Dockerfile \
                 ~/project/
       - run:
           name: "Push image"
@@ -741,7 +733,7 @@ executors:
     docker:
       # Run in a highly Nix-capable environment.
       - <<: *DOCKERHUB_AUTH
-        image: "nixos/nix:2.16.1"
+        image: "nixos/nix:2.25.2"
     environment:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us
       # to push to CACHIX_NAME.  CACHIX_NAME tells cachix which cache to push

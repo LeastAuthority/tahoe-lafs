@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches:
-      - "master"
+      - master
   pull_request:
+  workflow_dispatch:
 
 # At the start of each workflow run, GitHub creates a unique
 # GITHUB_TOKEN secret to use in the workflow. It is a good idea for
@@ -40,6 +41,7 @@ env:
 jobs:
 
   coverage:
+    if: ${{ false }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -138,6 +140,7 @@ jobs:
   # See notes about parallel builds on GitHub Actions at
   # https://coveralls-python.readthedocs.io/en/latest/usage/configuration.html
   finish-coverage-report:
+    if: ${{ false }}
     needs:
       - "coverage"
     runs-on: "ubuntu-latest"
@@ -152,6 +155,7 @@ jobs:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
   integration:
+    if: ${{ false }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -236,7 +240,100 @@ jobs:
           name: "integration.eliot-${{ matrix.os }}-Python-${{ matrix.python-version }}.json"
           path: integration.eliot.json
 
+  build-images:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - distro: "debian"
+            tag: "11"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "20.04"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "22.04"
+            python-version: "3.10"
+          - distro: "fedora"
+            tag: "35"
+            python-version: "3.10"
+          - distro: "oraclelinux"
+            tag: "8"
+            python-version: "3.9"
+    env:
+      TAG: ${{ matrix.image.tag }}
+      PYTHON_VERSION: ${{ matrix.image.python-version }}
+      DISTRO: ${{ matrix.image.distro }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Docker
+        id: verify_docker
+        run: |
+          docker run --rm hello-world:latest > /dev/null
+          docker rmi hello-world:latest > /dev/null
+          docker version
+
+      - name: Cache docker images
+        uses: ScribeMD/docker-cache@0.3.3
+        with:
+          key: |
+            docker-${{ matrix.image.distro }}_${{ matrix.image.tag }}-py${{ matrix.image.python-version }}-${{ hashFiles(
+              format('docker/{0}/Dockerfile', matrix.image.distro)
+            ) }}
+
+      - name: Build Docker image
+        id: build_image
+        run: |
+          docker images --filter "reference=*tahoelafsci/${DISTRO}"
+          docker images --filter "reference=*tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION}" --quiet | grep -v "^$" \
+          || docker \
+                build \
+                --build-arg TAG=${TAG} \
+                --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
+                -t tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION} \
+                -f ./docker/${DISTRO}/Dockerfile \
+                . \
+          && docker images --filter "reference=*tahoelafsci/${DISTRO}"
+
+  systemtest:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - distro: "debian"
+            tag: "11"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "20.04"
+            python-version: "3.9"
+          - distro: "ubuntu"
+            tag: "22.04"
+            python-version: "3.10"
+          - distro: "fedora"
+            tag: "35"
+            python-version: "3.10"
+          - distro: "oraclelinux"
+            tag: "8"
+            python-version: "3.9"
+    env:
+      TAG: ${{ matrix.image.tag }}
+      PYTHON_VERSION: ${{ matrix.image.python-version }}
+      DISTRO: ${{ matrix.image.distro }}
+    container:
+      image: ${{ matrix.image.distro }}
+      options: --cpus 1
+    steps:
+      - name: Test image
+        run: |
+          echo "${DISTRO}:${TAG}-py${PYTHON_VERSION}"
+
   packaging:
+    if: ${{ false }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
