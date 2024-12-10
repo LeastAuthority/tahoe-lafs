@@ -42,13 +42,21 @@ dockerhub-auth-template: &DOCKERHUB_AUTH
   jobs:
     - "build-image-debian-11":
         <<: *DOCKERHUB_CONTEXT
+    - "build-image-debian-12":
+        <<: *DOCKERHUB_CONTEXT
     - "build-image-ubuntu-20-04":
         <<: *DOCKERHUB_CONTEXT
     - "build-image-ubuntu-22-04":
         <<: *DOCKERHUB_CONTEXT
+    - "build-image-ubuntu-24-04":
+        <<: *DOCKERHUB_CONTEXT
     - "build-image-fedora-35":
         <<: *DOCKERHUB_CONTEXT
+    - "build-image-fedora-41":
+        <<: *DOCKERHUB_CONTEXT
     - "build-image-oraclelinux-8":
+        <<: *DOCKERHUB_CONTEXT
+    - "build-image-oraclelinux-9":
         <<: *DOCKERHUB_CONTEXT
     # Restore later as PyPy38
     #- "build-image-pypy27-buster":
@@ -682,6 +690,13 @@ jobs:
       TAG: "11"
       PYTHON_VERSION: "3.9"
 
+  build-image-debian-12:
+    <<: *BUILD_IMAGE
+
+    environment:
+      DISTRO: "debian"
+      TAG: "12"
+      PYTHON_VERSION: "3.11"
 
   build-image-ubuntu-20-04:
     <<: *BUILD_IMAGE
@@ -700,6 +715,13 @@ jobs:
       TAG: "22.04"
       PYTHON_VERSION: "3.10"
 
+  build-image-ubuntu-22-04:
+    <<: *BUILD_IMAGE
+
+    environment:
+      DISTRO: "ubuntu"
+      TAG: "24.04"
+      PYTHON_VERSION: "3.12"
 
   build-image-oraclelinux-8:
     <<: *BUILD_IMAGE
@@ -709,12 +731,28 @@ jobs:
       TAG: "8"
       PYTHON_VERSION: "3.9"
 
+  build-image-oraclelinux-9:
+    <<: *BUILD_IMAGE
+
+    environment:
+      DISTRO: "oraclelinux"
+      TAG: "9"
+      PYTHON_VERSION: "3.11"
+
   build-image-fedora-35:
     <<: *BUILD_IMAGE
 
     environment:
       DISTRO: "fedora"
       TAG: "35"
+      PYTHON_VERSION: "3"
+
+  build-image-fedora-41:
+    <<: *BUILD_IMAGE
+
+    environment:
+      DISTRO: "fedora"
+      TAG: "41"
       PYTHON_VERSION: "3"
 
   # build-image-pypy27-buster:
