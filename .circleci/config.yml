@@ -22,7 +22,9 @@ version: 2.1
 #
 #  https://app.circleci.com/settings/organization/github/tahoe-lafs/contexts
 dockerhub-context-template: &DOCKERHUB_CONTEXT
-  context: "dockerhub-auth"
+  context:
+    - dockerhub-empty
+    - dockerhub-auth
 
 # Required environment for using the coveralls tool to upload partial coverage
 # reports and then finish the process.
