@@ -1,0 +1,87 @@
+name: Nix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/nix.yml'
+      - 'flake.*'
+      - 'setup.cfg'
+      - '*.nix'
+      - '*.py'
+      - '*.ini'
+  pull_request:
+    paths:
+      - '.github/workflows/nix.yml'
+      - 'flake.*'
+      - 'setup.cfg'
+      - '*.nix'
+      - '*.py'
+      - '*.ini'
+
+jobs:
+  packaging:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - 312
+        nixpkgs:
+          - nixos-24_11
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install nix
+        id: install_nix
+        uses: nixbuild/nix-quick-install-action@v28
+
+      - name: Restore and cache Nix store for nixpkgs-${{ matrix.nixpkgs }}
+        uses: nix-community/cache-nix-action@v5
+        with:
+          # restore and save a cache using this key
+          primary-key: python${{ matrix.python-version }}-nixpkgs-${{ matrix.nixpkgs }}-${{ hashFiles('flake.*', '*.nix') }}
+          # if there's no cache hit, restore a cache by this prefix
+          restore-prefixes-first-match: nixpkgs-${{ matrix.nixpkgs }}-
+          # collect garbage until Nix store size (in bytes) is at most this number
+          # before trying to save a new cache
+          gc-max-store-size-linux: 1073741824
+          # do purge caches
+          purge: true
+          # purge all versions of the cache
+          purge-prefixes: python${{ matrix.python-version }}-nixpkgs-${{ matrix.nixpkgs }}-
+          # created more than 0 seconds ago relative to the start of the `Post Restore` phase
+          purge-created: 0
+          # except the version with the `primary-key`, if it exists
+          purge-primary-key: never
+
+      - name: Build package
+        env:
+          # CircleCI build environment looks like it has a zillion and a half cores.
+          # Don't let Nix autodetect this high core count because it blows up memory
+          # usage and fails the test run.  Pick a number of cores that suits the build
+          # environment we're paying for (the free one!).
+          DEPENDENCY_CORES: 3
+        run: |
+          nix build \
+            --verbose \
+            --print-build-logs \
+            --cores "$DEPENDENCY_CORES" \
+            .#python${{ matrix.python-version }}-tahoe-lafs
+
+      - name: Unit test
+        env:
+          # Once dependencies are built, we can allow some more concurrency for our own
+          # test suite.
+          UNITTEST_CORES: 8
+        run: |
+          nix run \
+            .#python${{ matrix.python-version }}-unittest -- \
+            --jobs $UNITTEST_CORES \
+            allmydata
