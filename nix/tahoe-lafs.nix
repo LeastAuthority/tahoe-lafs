@@ -9,6 +9,7 @@ in
 }:
 buildPythonPackage rec {
   inherit pname version;
+  format = "pyproject";
   src = tahoe-lafs-src;
   propagatedBuildInputs = with pythonPackages; [
     attrs
@@ -22,6 +23,8 @@ buildPythonPackage rec {
     filelock
     foolscap
     future
+    hatchling
+    hatch-vcs
     klein
     magic-wormhole
     netifaces
