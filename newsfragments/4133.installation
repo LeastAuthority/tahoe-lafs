@@ -1,1 +1,2 @@
 Now using the "hatch" build system, and pyproject.toml (exclusively)
+Also for the nix packages
