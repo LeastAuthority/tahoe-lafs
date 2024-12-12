@@ -115,6 +115,7 @@
       makeRuntimeEnv' = pyVersion: (pkgs.${pyVersion}.withPackages (ps: with ps;
         [ tahoe-lafs ] ++
         tahoe-lafs.passthru.extras.i2p ++
+        tahoe-lafs.passthru.extras.build ++
         tahoe-lafs.passthru.extras.tor
       )).overrideAttrs (old: {
         # By default, withPackages gives us a derivation with a fairly generic
@@ -197,11 +198,12 @@
               type = "app";
               program =
                 let
+                  hatchling = "${makeTestEnv pyVersion}/bin/hatchling";
                   python = "${makeTestEnv pyVersion}/bin/python";
                 in
                   writeScript "unit-tests"
                     ''
-                    ${python} setup.py update_version
+                    ${hatchling} build --hooks-only 2> /dev/null # Write _version.py
                     export TAHOE_LAFS_HYPOTHESIS_PROFILE=ci
                     export PYTHONPATH=$PWD/src
                     ${python} -m twisted.trial "$@"

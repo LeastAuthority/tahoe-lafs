@@ -23,8 +23,6 @@ buildPythonPackage rec {
     filelock
     foolscap
     future
-    hatchling
-    hatch-vcs
     klein
     magic-wormhole
     netifaces
@@ -40,6 +38,7 @@ buildPythonPackage rec {
     zfec
     zope_interface
   ] ++
+  passthru.extras.build ++
   # Get the dependencies for the Twisted extras we depend on, too.
   twisted.passthru.optional-dependencies.tls ++
   twisted.passthru.optional-dependencies.conch;
@@ -63,6 +62,12 @@ buildPythonPackage rec {
         mock
         prometheus-client
         testtools
+      ];
+      build = [
+        dulwich
+        gpgme
+        hatchling
+        hatch-vcs
       ];
       integrationtest = [
         pytest
