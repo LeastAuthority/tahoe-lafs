@@ -89,6 +89,7 @@ buildPythonPackage rec {
     in
       ''
         cp ${builtins.toFile "_version.py" (versionFileContents version)} src/allmydata/_version.py
+        chmod 0644 src/allmydata/_version.py
       '';
 
   meta = with lib; {
