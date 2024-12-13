@@ -89,6 +89,9 @@ workflows:
       - "oraclelinux-8":
           {}
 
+      - "fedora-40":
+          {}
+
       - "nixos":
           name: "<<matrix.nixpkgs>>-<<matrix.pythonVersion>>"
           matrix:
@@ -543,12 +546,16 @@ jobs:
       - store_artifacts: *STORE_OTHER_ARTIFACTS
       - run: *SUBMIT_COVERAGE
 
-  fedora-35:
+  fedora-40:
     <<: *RHEL_DERIV
     docker:
       - <<: *DOCKERHUB_AUTH
-        image: "tahoelafsci/fedora:35-py3"
+        image: "tahoelafsci/fedora:40-py3"
         user: "nobody"
+
+    environment:
+      <<: *UTF_8_ENVIRONMENT
+      TAHOE_LAFS_TOX_ENVIRONMENT: "py312"
 
   nixos:
     parameters:
