@@ -86,10 +86,10 @@ workflows:
       - "debian-12":
           {}
 
-      - "ubuntu-20-04":
+      - "ubuntu-22-04":
           {}
 
-      - "ubuntu-22-04":
+      - "ubuntu-24-04":
           {}
 
       # Equivalent to RHEL 8; CentOS 8 is dead.
@@ -530,16 +530,6 @@ jobs:
       - run: *SETUP_VIRTUALENV
       - run: *RUN_TESTS
 
-  ubuntu-20-04:
-    <<: *DEBIAN
-    docker:
-      - <<: *DOCKERHUB_AUTH
-        image: "tahoelafsci/ubuntu:20.04-py3.9"
-        user: "nobody"
-    environment:
-      <<: *UTF_8_ENVIRONMENT
-      TAHOE_LAFS_TOX_ENVIRONMENT: "py39"
-
   ubuntu-22-04:
     <<: *DEBIAN
     docker:
@@ -549,6 +539,16 @@ jobs:
     environment:
       <<: *UTF_8_ENVIRONMENT
       TAHOE_LAFS_TOX_ENVIRONMENT: "py310"
+
+  ubuntu-24-04:
+    <<: *DEBIAN
+    docker:
+      - <<: *DOCKERHUB_AUTH
+        image: "tahoelafsci/ubuntu:24.04-py3.12"
+        user: "nobody"
+    environment:
+      <<: *UTF_8_ENVIRONMENT
+      TAHOE_LAFS_TOX_ENVIRONMENT: "py312"
 
   oraclelinux-8: &RHEL_DERIV
     docker:
