@@ -124,23 +124,58 @@ workflows:
     #  https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3541
     # Since context can not be defined at the parent level, we need to repeat our-selves
     jobs:
-      - "build-image-debian-12":
+      - "build-image":
           context: "dockerhub-auth"
-      - "build-image-ubuntu-20-04":
+          name: "build-image-debian-12"
+          distro: "debian"
+          tag: "12"
+          pythonVersion: "3.11"
+      - "build-image":
           context: "dockerhub-auth"
-      - "build-image-ubuntu-22-04":
+          name: "build-image-ubuntu-20.04"
+          distro: "ubuntu"
+          tag: "20.04"
+          pythonVersion: "3.9"
+      - "build-image":
           context: "dockerhub-auth"
-      - "build-image-ubuntu-24-04":
+          name: "build-image-ubuntu-22.04"
+          distro: "ubuntu"
+          tag: "22.04"
+          pythonVersion: "3.10"
+      - "build-image":
           context: "dockerhub-auth"
-      - "build-image-oraclelinux-8":
+          name: "build-image-ubuntu-24.04"
+          distro: "ubuntu"
+          tag: "24.04"
+          pythonVersion: "3.12"
+      - "build-image":
           context: "dockerhub-auth"
-      - "build-image-fedora-35":
+          name: "build-image-oraclelinux-8"
+          distro: "oraclelinux"
+          tag: "8"
+          pythonVersion: "3.9"
+      - "build-image":
           context: "dockerhub-auth"
-      - "build-image-fedora-40":
+          name: "build-image-fedora-35"
+          distro: "fedora"
+          tag: "35"
+          pythonVersion: "3"
+      - "build-image":
           context: "dockerhub-auth"
-      # Restore later as PyPy38
-      #- "build-image-pypy27-buster":
+          name: "build-image-fedora-40"
+          distro: "fedora"
+          tag: "40"
+          pythonVersion: "3"
+      # Restore later as PyPy39
+      #- "build-image":
       #    context: "dockerhub-auth"
+      #    name: "build-image-<<distro>>-<<tag>>:py<<pythonVersion>>"
+      #    distro: "pypy"
+      #    tag: "buster"
+      #    # We only have Python 2 for PyPy right now so there's no support for
+      #    # setting up PyPy 3 in the image building toolchain.  This value is just
+      #    # for constructing the right Docker image tag.
+      #    pythonVersion: "2"
 
 # Every job that pushes a Docker image from Docker Hub must authenticate to
 # it. Here is a Docker executor template that gets the credentials from the
@@ -584,23 +619,35 @@ jobs:
           command: |
             /tmp/venv/bin/tox -e docs
 
-  build-image: &BUILD_IMAGE
-    # This is a template for a job to build a Docker image that has as much of
+  build-image:
+    # This is a job to build a Docker image that has as much of
     # the setup as we can manage already done and baked in.  This cuts down on
     # the per-job setup time the actual testing jobs have to perform - by
     # perhaps 10% - 20%.
     #
     # https://circleci.com/blog/how-to-build-a-docker-image-on-circleci-2-0/
+    parameters:
+      distro:
+        description: >-
+          Reference to the base image to use
+        type: "string"
+        default: "debian"
+      tag:
+        description: >-
+          Tag of the base image to use for this distro
+        type: "string"
+        default: "12"
+      pythonVersion:
+        description: >-
+          Version of Python to use on this distro:tag
+        type: "string"
+        default: "3.10"
+
     docker:
       - <<: *DOCKERHUB_AUTH
         # CircleCI build images; https://github.com/CircleCI-Public/cimg-base
         # for details.
         image: "cimg/base:2022.09"
-
-    environment:
-      DISTRO: "tahoelafsci/<DISTRO>:foo-py3.9"
-      TAG: "tahoelafsci/distro:<TAG>-py3.9"
-      PYTHON_VERSION: "tahoelafsci/distro:tag-py<PYTHON_VERSION}"
 
     steps:
       - "checkout"
@@ -619,10 +666,10 @@ jobs:
           command: |
             docker \
                 build \
-                --build-arg TAG=${TAG} \
-                --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
-                -t tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION} \
-                -f ~/project/.circleci/Dockerfile.${DISTRO} \
+                --build-arg TAG=<<parameters.tag>> \
+                --build-arg PYTHON_VERSION=<<parameters.pythonVersion>> \
+                -t tahoelafsci/<<parameters.distro>>:<<parameters.tag>>-py<<parameters.pythonVersion>> \
+                -f ~/project/.circleci/Dockerfile.<<parameters.distro>> \
                 ~/project/
       - when:
           # Push as part of the workflow but only if requested.
@@ -631,67 +678,7 @@ jobs:
             - run:
                 name: "Push image"
                 command: |
-                  docker push tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION}
-
-  # Now we can re-use the template from above to build each required images
-  build-image-debian-12:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "debian"
-      TAG: "12"
-      PYTHON_VERSION: "3.11"
-
-  build-image-ubuntu-20-04:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "ubuntu"
-      TAG: "20.04"
-      PYTHON_VERSION: "3.9"
-
-  build-image-ubuntu-22-04:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "ubuntu"
-      TAG: "22.04"
-      PYTHON_VERSION: "3.10"
-
-  build-image-ubuntu-24-04:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "ubuntu"
-      TAG: "24.04"
-      PYTHON_VERSION: "3.12"
-
-  build-image-oraclelinux-8:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "oraclelinux"
-      TAG: "8"
-      PYTHON_VERSION: "3.9"
-
-  build-image-fedora-35:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "fedora"
-      TAG: "35"
-      PYTHON_VERSION: "3"
-
-  build-image-fedora-40:
-    <<: *BUILD_IMAGE
-    environment:
-      DISTRO: "fedora"
-      TAG: "40"
-      PYTHON_VERSION: "3"
-
-  # build-image-pypy27-buster:
-  #   <<: *BUILD_IMAGE
-  #   environment:
-  #     DISTRO: "pypy"
-  #     TAG: "buster"
-  #     # We only have Python 2 for PyPy right now so there's no support for
-  #     # setting up PyPy 3 in the image building toolchain.  This value is just
-  #     # for constructing the right Docker image tag.
-  #     PYTHON_VERSION: "2"
+                  docker push tahoelafsci/<<parameters.distro>>:<<parameters.tag>>-py<<parameters.pythonVersion>>
 
 executors:
   windows:
