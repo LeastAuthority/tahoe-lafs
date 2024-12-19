@@ -543,6 +543,37 @@ jobs:
       <<: *UTF_8_ENVIRONMENT
       TAHOE_LAFS_TOX_ENVIRONMENT: "py310"
 
+  oraclelinux-8: &RHEL_DERIV
+    docker:
+      - <<: *DOCKERHUB_AUTH
+        image: "tahoelafsci/oraclelinux:8-py3.9"
+        user: "nobody"
+
+    environment:
+      <<: *UTF_8_ENVIRONMENT
+      TAHOE_LAFS_TOX_ENVIRONMENT: "py39"
+
+    # pip cannot install packages if the working directory is not readable.
+    # We want to run a lot of steps as nobody instead of as root.
+    working_directory: "/tmp/project"
+
+    steps:
+      - "checkout"
+      - run: *SETUP_VIRTUALENV
+      - run: *RUN_TESTS
+      - store_test_results: *STORE_TEST_RESULTS
+      - store_artifacts: *STORE_TEST_LOG
+      - store_artifacts: *STORE_ELIOT_LOG
+      - store_artifacts: *STORE_OTHER_ARTIFACTS
+      - run: *SUBMIT_COVERAGE
+
+  fedora-35:
+    <<: *RHEL_DERIV
+    docker:
+      - <<: *DOCKERHUB_AUTH
+        image: "tahoelafsci/fedora:35-py3"
+        user: "nobody"
+
   nixos:
     parameters:
       nixpkgs:
@@ -672,6 +703,14 @@ jobs:
       DISTRO: "ubuntu"
       TAG: "24.04"
       PYTHON_VERSION: "3.12"
+
+  build-image-oraclelinux-8:
+    <<: *BUILD_IMAGE
+
+    environment:
+      DISTRO: "oraclelinux"
+      TAG: "8"
+      PYTHON_VERSION: "3.9"
 
   build-image-oraclelinux-8:
     <<: *BUILD_IMAGE
