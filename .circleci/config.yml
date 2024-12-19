@@ -11,52 +11,10 @@
 #
 version: 2.1
 
-# Every job that pushes a Docker image from Docker Hub must authenticate to
-# it.  Define a couple yaml anchors that can be used to supply the necessary
-# credentials.
-
-# First is a CircleCI job context which makes Docker Hub credentials available
-# in the environment.
-#
-# Contexts are managed in the CircleCI web interface:
-#
-#  https://app.circleci.com/settings/organization/github/tahoe-lafs/contexts
-dockerhub-context-template: &DOCKERHUB_CONTEXT
-  context: "dockerhub-auth"
-
 # Required environment for using the coveralls tool to upload partial coverage
 # reports and then finish the process.
 coveralls-environment: &COVERALLS_ENVIRONMENT
   COVERALLS_REPO_TOKEN: "JPf16rLB7T2yjgATIxFzTsEgMdN1UNq6o"
-
-# Next is a Docker executor template that gets the credentials from the
-# environment and supplies them to the executor.
-dockerhub-auth-template: &DOCKERHUB_AUTH
-  - auth:
-      username: $DOCKERHUB_USERNAME
-      password: $DOCKERHUB_PASSWORD
-
-  # A template that can be shared between the two different image-building
-# workflows.
-.images: &IMAGES
-  jobs:
-    - "build-image-debian-12":
-        <<: *DOCKERHUB_CONTEXT
-    - "build-image-ubuntu-20-04":
-        <<: *DOCKERHUB_CONTEXT
-    - "build-image-ubuntu-22-04":
-        <<: *DOCKERHUB_CONTEXT
-    - "build-image-ubuntu-24-04":
-        <<: *DOCKERHUB_CONTEXT
-    - "build-image-oraclelinux-8":
-        <<: *DOCKERHUB_CONTEXT
-    - "build-image-fedora-35":
-        <<: *DOCKERHUB_CONTEXT
-    - "build-image-fedora-40":
-        <<: *DOCKERHUB_CONTEXT
-    # Restore later as PyPy38
-    #- "build-image-pypy27-buster":
-    #    <<: *DOCKERHUB_CONTEXT
 
 parameters:
   # Control whether the image-building workflow runs as part of this pipeline.
@@ -159,7 +117,38 @@ workflows:
             - "windows-server-2022"
 
   images:
-    <<: *IMAGES
+    # Build images with the dockerhub-auth context so we can use our own credentials,
+    # Contexts are managed in the CircleCI web interface:
+    #  https://app.circleci.com/settings/organization/github/tahoe-lafs/contexts
+    # WARN: this does not work for fork:
+    #  https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3541
+    # Since context can not be defined at the parent level, we need to repeat our-selves
+    jobs:
+      - "build-image-debian-12":
+          context: "dockerhub-auth"
+      - "build-image-ubuntu-20-04":
+          context: "dockerhub-auth"
+      - "build-image-ubuntu-22-04":
+          context: "dockerhub-auth"
+      - "build-image-ubuntu-24-04":
+          context: "dockerhub-auth"
+      - "build-image-oraclelinux-8":
+          context: "dockerhub-auth"
+      - "build-image-fedora-35":
+          context: "dockerhub-auth"
+      - "build-image-fedora-40":
+          context: "dockerhub-auth"
+      # Restore later as PyPy38
+      #- "build-image-pypy27-buster":
+      #    context: "dockerhub-auth"
+
+# Every job that pushes a Docker image from Docker Hub must authenticate to
+# it. Here is a Docker executor template that gets the credentials from the
+# environment and supplies them to the executor.
+dockerhub-auth-template: &DOCKERHUB_AUTH
+  - auth:
+      username: $DOCKERHUB_USERNAME
+      password: $DOCKERHUB_PASSWORD
 
 jobs:
   finish-coverage-report:
@@ -644,10 +633,9 @@ jobs:
                 command: |
                   docker push tahoelafsci/${DISTRO}:${TAG}-py${PYTHON_VERSION}
 
-
+  # Now we can re-use the template from above to build each required images
   build-image-debian-12:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "debian"
       TAG: "12"
@@ -655,16 +643,13 @@ jobs:
 
   build-image-ubuntu-20-04:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "ubuntu"
       TAG: "20.04"
       PYTHON_VERSION: "3.9"
 
-
   build-image-ubuntu-22-04:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "ubuntu"
       TAG: "22.04"
@@ -672,7 +657,6 @@ jobs:
 
   build-image-ubuntu-24-04:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "ubuntu"
       TAG: "24.04"
@@ -680,7 +664,6 @@ jobs:
 
   build-image-oraclelinux-8:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "oraclelinux"
       TAG: "8"
@@ -688,7 +671,6 @@ jobs:
 
   build-image-fedora-35:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "fedora"
       TAG: "35"
@@ -696,7 +678,6 @@ jobs:
 
   build-image-fedora-40:
     <<: *BUILD_IMAGE
-
     environment:
       DISTRO: "fedora"
       TAG: "40"
