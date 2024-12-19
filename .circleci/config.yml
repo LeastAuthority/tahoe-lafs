@@ -41,15 +41,9 @@ workflows:
     when: "<< pipeline.parameters.run-tests >>"
     jobs:
       # Start with jobs testing various platforms.
-      - "debian-12":
-          {}
-
-      - "ubuntu-20-04":
-          {}
-
-      - "ubuntu-22-04":
-          {}
-
+      - "debian-12"
+      - "ubuntu-20-04"
+      - "ubuntu-22-04"
       - "nixos":
           name: "<<matrix.nixpkgs>>-<<matrix.pythonVersion>>"
           matrix:
@@ -60,22 +54,15 @@ workflows:
                 - "python310"
                 - "python311"
                 - "python312"
-
       # Eventually, test against PyPy 3.9
       #- "pypy27-buster":
       #    {}
-
       # Other assorted tasks and configurations
-      - "codechecks":
-          {}
-      - "pyinstaller":
-          {}
-      - "c-locale":
-          {}
+      - "codechecks"
+      - "pyinstaller"
+      - "c-locale"
       # Any locale other than C or UTF-8.
-      - "another-locale":
-          {}
-
+      - "another-locale"
       - "windows-server-2022":
           name: "Windows Server 2022, CPython <<matrix.pythonVersion>>"
           matrix:
@@ -90,7 +77,6 @@ workflows:
               pythonVersion:
                 - "3.9"
                 - "3.12"
-
       - "integration":
           # attempt to ignore failures from this build, since it
           # usually does (on one of the test_tor.py integration
@@ -101,12 +87,8 @@ workflows:
             # If the unit test suite doesn't pass, don't bother running the
             # integration tests.
             - "debian-12"
-
-      - "typechecks":
-          {}
-      - "docs":
-          {}
-
+      - "typechecks"
+      - "docs"
       - "finish-coverage-report":
           requires:
             # Referencing the job by "alias" (as CircleCI calls the mapping
