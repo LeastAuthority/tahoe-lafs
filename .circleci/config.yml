@@ -61,7 +61,7 @@ workflows:
                 - "python311"
                 - "python312"
 
-      # Eventually, test against PyPy 3.8
+      # Eventually, test against PyPy 3.9
       #- "pypy27-buster":
       #    {}
 
@@ -166,7 +166,7 @@ workflows:
           distro: "fedora"
           tag: "40"
           pythonVersion: "3"
-      # Restore later as PyPy39
+      # Restore later as PyPy 3.9
       #- "build-image":
       #    context: "dockerhub-auth"
       #    name: "build-image-<<distro>>-<<tag>>:py<<pythonVersion>>"
