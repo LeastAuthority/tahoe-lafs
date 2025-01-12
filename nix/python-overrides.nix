@@ -57,6 +57,7 @@ in {
   # care about, also tkinter doesn't work on PyPy.
   matplotlib = onPyPy (matplotlib: matplotlib.override {
     tornado = null;
+    pillow = null;
     enableTk = false;
   }) super.matplotlib;
 
