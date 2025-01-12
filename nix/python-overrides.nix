@@ -53,6 +53,10 @@ in {
   pydantic-core = onPyPy (self.callPackage
     ./pydantic-core.nix) super.pydantic-core;
 
+  # Typer depends on pdm-backend which depends on mercurial for its tests and
+  # which in turn depends on fb-re2 which doesn't work with PyPy.
+  pdm-backend = onPyPy dontCheck super.pdm-backend;
+
   # greenlet is incompatible with PyPy but PyPy has a builtin equivalent.
   # Fixed in nixpkgs in a5f8184fb816a4fd5ae87136838c9981e0d22c67.
   greenlet = onPyPy (drv: null) super.greenlet;
