@@ -49,10 +49,9 @@ in {
     inherit (super) collections-extended;
   };
 
-  # Upstream Pydantic-core's rust building fails on PyPy
-  pydantic-core = self.callPackage ./pydantic-core.nix {
-    inherit (super) pydantic-core;
-  };
+  # Upstream pydantic-core's rust building fails on PyPy.
+  pydantic-core = onPyPy (self.callPackage
+    ./pydantic-core.nix) super.pydantic-core;
 
   # greenlet is incompatible with PyPy but PyPy has a builtin equivalent.
   # Fixed in nixpkgs in a5f8184fb816a4fd5ae87136838c9981e0d22c67.
