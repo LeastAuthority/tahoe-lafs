@@ -99,6 +99,7 @@ workflows:
               nixpkgs:
                 - "nixpkgs-24_11"
               pythonVersion:
+                - "pypy310"
                 - "python311"
                 - "python312"
 
