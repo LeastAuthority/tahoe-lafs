@@ -64,6 +64,10 @@ in {
   # Only one out of 256 tests fail.  Negligible.
   annotated-types = onPyPy dontCheck super.annotated-types;
 
+  # Same maturin fix for PyPy as so often
+  rpds-py = onPyPy (self.callPackage
+    ./rpds-py.nix) super.rpds-py;
+
   # greenlet is incompatible with PyPy but PyPy has a builtin equivalent.
   # Fixed in nixpkgs in a5f8184fb816a4fd5ae87136838c9981e0d22c67.
   greenlet = onPyPy (drv: null) super.greenlet;
