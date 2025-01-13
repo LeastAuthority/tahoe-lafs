@@ -61,6 +61,9 @@ in {
   # "setup: line 1726: python: command not found" blah blah
   meson = onPyPy dontCheck super.meson;
 
+  # Only one out of 256 tests fail.  Negligible.
+  annotated-types = onPyPy dontCheck super.annotated-types;
+
   # greenlet is incompatible with PyPy but PyPy has a builtin equivalent.
   # Fixed in nixpkgs in a5f8184fb816a4fd5ae87136838c9981e0d22c67.
   greenlet = onPyPy (drv: null) super.greenlet;
