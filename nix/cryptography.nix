@@ -20,6 +20,8 @@
   pythonOlder,
   rustPlatform,
   Security,
+  python,
+  ...
 }:
 
 buildPythonPackage rec {
@@ -81,6 +83,12 @@ buildPythonPackage rec {
     # save compute time by not running benchmarks
     "tests/bench"
   ];
+
+  # Without this, when building for PyPy, `maturin build` seems to fail to
+  # find the interpreter at all and then fails early in the build process with
+  # an error saying "unsupported Python interpreter".  We can easily point
+  # directly at the relevant interpreter, so do that.
+  maturinBuildFlags = [ "--interpreter" python.executable ];
 
   passthru = {
     vectors = cryptography-vectors;

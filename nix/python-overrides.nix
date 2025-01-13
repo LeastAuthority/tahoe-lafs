@@ -64,9 +64,35 @@ in {
   # Only one out of 256 tests fail.  Negligible.
   annotated-types = onPyPy dontCheck super.annotated-types;
 
+  # Vendor to fix building with Pypy
+  kiwisolver = onPyPy (self.callPackage
+    ./kiwisolver.nix) super.kiwisolver;
+
+  aiohappyeyeballs = onPyPy (
+    (aiohappyeyeballs: aiohappyeyeballs.override {
+      myst-parser = null;
+      sphinx-autobuild = null;
+      sphinxHook = null;
+    })) super.aiohappyeyeballs;
+
   # Same maturin fix for PyPy as so often
   rpds-py = onPyPy (self.callPackage
     ./rpds-py.nix) super.rpds-py;
+
+  # Eat the rich!
+  rich = null;
+
+  # 
+  regex = onPyPy dontCheck super.regex;
+
+  # multidict first says it's doing a pure python build
+  # and later, in the test suite, complains about not being
+  # able to call the C extensions
+  multidict = onPyPy dontCheck super.multidict;
+
+  # Upstream cryptography's rust building fails on PyPy.
+  cryptography = onPyPy (self.callPackage
+    ./cryptography.nix) super.cryptography;
 
   # greenlet is incompatible with PyPy but PyPy has a builtin equivalent.
   # Fixed in nixpkgs in a5f8184fb816a4fd5ae87136838c9981e0d22c67.
@@ -87,6 +113,7 @@ in {
     # integration with pandas that we don't care about.  pandas is a huge
     # dependency.
     pandas = null;
+    rich = null;
   }) super.tqdm;
 
   # The treq test suite depends on httpbin.  httpbin pulls in babel (flask ->
@@ -126,7 +153,7 @@ in {
   # The test suite fails with some rather irrelevant (to us) string comparison
   # failure on PyPy.  Probably a PyPy bug but doesn't seem like we should
   # care.
-  rich = onPyPy dontCheck super.rich;
+  # rich = onPyPy dontCheck super.rich;
 
   # The pyutil test suite fails in some ... test ... for some deprecation
   # functionality we don't care about.
