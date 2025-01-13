@@ -57,6 +57,10 @@ in {
   # which in turn depends on fb-re2 which doesn't work with PyPy.
   pdm-backend = onPyPy dontCheck super.pdm-backend;
 
+  # Meson build succeeds, but tests don't run
+  # "setup: line 1726: python: command not found" blah blah
+  meson = onPyPy dontCheck super.meson;
+
   # greenlet is incompatible with PyPy but PyPy has a builtin equivalent.
   # Fixed in nixpkgs in a5f8184fb816a4fd5ae87136838c9981e0d22c67.
   greenlet = onPyPy (drv: null) super.greenlet;
