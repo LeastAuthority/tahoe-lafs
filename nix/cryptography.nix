@@ -19,7 +19,7 @@
   pytestCheckHook,
   pythonOlder,
   rustPlatform,
-  Security,
+  # Security,
   python,
   ...
 }:
@@ -60,7 +60,7 @@ buildPythonPackage rec {
   buildInputs =
     [ openssl ]
     ++ lib.optionals stdenv.hostPlatform.isDarwin [
-      Security
+      # Security
       libiconv
     ]
     ++ lib.optionals (pythonOlder "3.9") [ libxcrypt ];

@@ -61,12 +61,33 @@ in {
   # "setup: line 1726: python: command not found" blah blah
   meson = onPyPy dontCheck super.meson;
 
+  # - rich not installed
+  typer = onPyPy (typer: typer.override {
+  }) (dontCheck super.typer);
+
   # Only one out of 256 tests fail.  Negligible.
   annotated-types = onPyPy dontCheck super.annotated-types;
 
   # Vendor to fix building with Pypy
-  kiwisolver = onPyPy (self.callPackage
-    ./kiwisolver.nix) super.kiwisolver;
+  # kiwisolver = onPyPy (self.callPackage
+  #  ./kiwisolver.nix) super.kiwisolver;
+  # kiwisolver = onPyPy dontCheck super.kiwisolver;
+  kiwisolver = onPyPy (drv: null) super.kiwisolver;
+
+  # 5 failed, 991 passed, 62 skipped, 1 deselected, 8 warnings in 145.15s (0:02:25)
+  tornado = onPyPy dontCheck super.tornado;
+  # 2 failed, 564 passed, 79 skipped in 38.14s
+  pyspnego = onPyPy dontCheck super.pyspnego;
+
+  # Eliot tests depend on distributed which depends on too many things,
+  # some of which don't work with PyPy it seems
+  eliot = onPyPy dontCheck super.eliot;
+
+  # - greenlet>=1.0 not satisfied by version 0.4.1
+  watchdog = onPyPy dontCheck super.watchdog;
+  numpy = onPyPy dontCheck super.numpy;
+  sphinx = onPyPy dontCheck super.sphinx;
+
 
   aiohappyeyeballs = onPyPy (
     (aiohappyeyeballs: aiohappyeyeballs.override {
@@ -78,9 +99,11 @@ in {
   # Same maturin fix for PyPy as so often
   rpds-py = onPyPy (self.callPackage
     ./rpds-py.nix) super.rpds-py;
+  pycddl = onPyPy (self.callPackage
+    ./pycddl.nix) super.pycddl;
 
   # Eat the rich!
-  rich = null;
+  # rich = null;
 
   # 
   regex = onPyPy dontCheck super.regex;
@@ -155,7 +178,7 @@ in {
   # The test suite fails with some rather irrelevant (to us) string comparison
   # failure on PyPy.  Probably a PyPy bug but doesn't seem like we should
   # care.
-  # rich = onPyPy dontCheck super.rich;
+  rich = onPyPy dontCheck super.rich;
 
   # The pyutil test suite fails in some ... test ... for some deprecation
   # functionality we don't care about.
