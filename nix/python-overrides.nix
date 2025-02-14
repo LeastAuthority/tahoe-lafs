@@ -116,6 +116,8 @@ in {
     rich = null;
   }) super.tqdm;
 
+  tkinter = onPyPy (drv: null) super.tkinter;
+
   # The treq test suite depends on httpbin.  httpbin pulls in babel (flask ->
   # jinja2 -> babel) and arrow (brotlipy -> construct -> arrow).  babel fails
   # its test suite and arrow segfaults.
